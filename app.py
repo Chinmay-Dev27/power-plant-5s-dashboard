@@ -2,307 +2,235 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from github import Github, Auth
-from io import StringIO
 from datetime import datetime
-import requests
-from streamlit_lottie import st_lottie
+import time
 
-# --- PAGE CONFIGURATION (Must be first) ---
-st.set_page_config(page_title="5S Power Command", layout="wide", page_icon="⚡")
+# --- 1. CONFIGURATION & CSS (The "War Room" Look) ---
+st.set_page_config(page_title="CXO Review: Thermal Fleet", layout="wide", page_icon="⚡")
 
-# --- 1. ASSETS & ANIMATIONS ---
-def load_lottieurl(url):
-    try:
-        r = requests.get(url, timeout=3)
-        return r.json() if r.status_code == 200 else None
-    except: return None
-
-# New High-Quality Animation Links
-anim_wealth = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
-anim_warning = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
-anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
-
-# --- 2. PROFESSIONAL STYLING (CSS) ---
 st.markdown("""
     <style>
-    /* MAIN BACKGROUND GRADIENT (Subtle Dark Blue-Black) */
-    .stApp {
-        background: linear-gradient(to bottom, #0e1117, #161b22);
-    }
+    /* Global Reset */
+    .block-container { padding-top: 1rem; padding-bottom: 1rem; }
     
-    /* GLASSMORPHISM CARDS */
-    .glass-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    /* UNIT CARD STYLING */
+    .unit-card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 15px;
         text-align: center;
+        transition: all 0.3s ease;
     }
     
-    /* NEON GLOW FOR PROFIT */
-    .card-profit {
-        border: 2px solid #00ff00;
-        box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
-        background: linear-gradient(145deg, rgba(0,50,0,0.4), rgba(0,20,0,0.8));
-    }
-    
-    /* NEON GLOW FOR LOSS */
-    .card-loss {
-        border: 2px solid #ff3333;
-        box-shadow: 0 0 15px rgba(255, 50, 50, 0.3);
-        background: linear-gradient(145deg, rgba(50,0,0,0.4), rgba(20,0,0,0.8));
-    }
+    /* SCENE STATES (Colors) */
+    .scene-critical { border-left: 5px solid #ff3333; box-shadow: 0 0 10px rgba(255, 51, 51, 0.1); }
+    .scene-risk { border-left: 5px solid #ffb000; }
+    .scene-acceptable { border-left: 5px solid #00ccff; }
+    .scene-excellent { border-left: 5px solid #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.1); }
 
-    /* SCROLLING TICKER (Fixed Format) */
-    .ticker-container {
-        width: 100%;
-        overflow: hidden;
-        background-color: #000;
-        border-top: 2px solid #333;
-        border-bottom: 2px solid #333;
-        white-space: nowrap;
-        box-sizing: border-box;
-        padding: 10px 0;
+    /* METRICS */
+    .metric-title { font-size: 14px; color: #8b949e; letter-spacing: 1px; text-transform: uppercase; }
+    .metric-value { font-size: 28px; font-weight: 700; margin: 5px 0; }
+    .metric-delta { font-size: 14px; font-weight: 500; }
+
+    /* ANIMATIONS (CSS Only - No Lottie Loops) */
+    @keyframes flash-red { 
+        0% { background-color: #161b22; } 
+        50% { background-color: #3b0e0e; } 
+        100% { background-color: #161b22; } 
     }
-    .ticker-text {
-        display: inline-block;
-        padding-left: 100%;
-        animation: ticker 25s linear infinite;
-        font-family: 'Courier New', monospace;
-        font-weight: bold;
-        color: #00ffcc;
-        font-size: 18px;
-    }
-    @keyframes ticker {
-        0%   { transform: translate(0, 0); }
-        100% { transform: translate(-100%, 0); }
+    @keyframes flash-green { 
+        0% { background-color: #161b22; } 
+        50% { background-color: #0e2e1b; } 
+        100% { background-color: #161b22; } 
     }
     
-    /* BIG METRIC TEXT */
-    .metric-value { font-size: 38px; font-weight: 800; margin: 0; }
-    .metric-label { font-size: 14px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
-    
+    .anim-critical { animation: flash-red 1s ease-in-out 1; }
+    .anim-improve { animation: flash-green 1s ease-in-out 1; }
+
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. GITHUB DATA ENGINE ---
-def init_github():
-    try:
-        if "GITHUB_TOKEN" in st.secrets:
-            auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
-            g = Github(auth=auth)
-            return g.get_repo(st.secrets["REPO_NAME"])
-    except: return None
+# --- 2. LOGIC ENGINE ---
 
-def load_data(repo):
-    if not repo: return pd.DataFrame(), None
-    try:
-        file = repo.get_contents("history_v8.csv", ref=st.secrets["BRANCH"])
-        df = pd.read_csv(StringIO(file.decoded_content.decode()))
-        df['Date'] = pd.to_datetime(df['Date'])
-        return df, file.sha
-    except: return pd.DataFrame(columns=["Date", "HR", "Profit", "ESCert"]), None
+# A. Normalization (KPIs)
+def calculate_kpis(gross_gen, act_hr, design_hr):
+    """Computes Normalized KPIs for Executive Comparison"""
+    # Constants
+    COAL_GCV = 3600
+    COAL_PRICE = 4500 # Rs/Ton
+    PAT_TARGET = design_hr + 50 # Example Target
+    
+    # 1. HR Delta
+    hr_delta = act_hr - PAT_TARGET
+    
+    # 2. Financial Impact (Simplified for brevity)
+    # Energy Loss = Delta HR * Gen * 1000
+    # Coal Loss = Energy Loss / GCV
+    # Money = Coal Loss * Price/1000
+    if gross_gen > 0:
+        kcal_loss = hr_delta * gross_gen * 1_000_000
+        coal_loss_tons = kcal_loss / COAL_GCV
+        profit = -1 * (coal_loss_tons * (COAL_PRICE/1000))
+        # Add PAT/Carbon credits logic here if needed, keeping it raw P&L for now
+    else:
+        profit = 0
+        
+    # 3. Profit per MU (Normalized)
+    profit_per_mu = profit / gross_gen if gross_gen > 0 else 0
+    
+    return profit, hr_delta, profit_per_mu
 
-def save_data(repo, df, sha):
-    try:
-        csv_content = df.to_csv(index=False)
-        msg = "Daily Update" if sha else "Initial Commit"
-        if sha: repo.update_file("history_v8.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("history_v8.csv", msg, csv_content, branch=st.secrets["BRANCH"])
-        return True
-    except: return False
+# B. SCENE Logic (State Machine)
+def get_scene(profit):
+    if profit > 100000: return "EXCELLENT", "#00ff88", "scene-excellent"
+    elif profit >= 0: return "ACCEPTABLE", "#00ccff", "scene-acceptable"
+    elif profit >= -50000: return "RISK", "#ffb000", "scene-risk"
+    else: return "CRITICAL", "#ff3333", "scene-critical"
 
-# --- 4. SIDEBAR (CONTROLS) ---
+# --- 3. SIDEBAR (PRESENTER MODE ONLY) ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
-    st.title("Control Panel")
+    st.header("🔒 Presenter Controls")
+    EXEC_MODE = st.toggle("🎙️ Executive Mode", True)
+    FREEZE = st.toggle("⏸ Freeze Screen", False)
     
-    with st.expander("⚙️ Design Parameters", expanded=False):
-        DESIGN_HR = st.number_input("Design Heat Rate", value=2250.0)
-        TARGET_HR = st.number_input("PAT Target HR", value=2350.0)
-        DESIGN_MS = st.number_input("Design MS Temp", value=540.0)
-        DESIGN_VAC = st.number_input("Design Vacuum", value=-0.92)
+    st.divider()
     
-    st.markdown("### 📝 Daily Inputs")
-    with st.form("daily_form"):
-        date_in = st.date_input("Date", datetime.now())
+    # HIDDEN INPUTS (Simulating Live Data Feed)
+    st.caption("Data Injection (Hidden in Call)")
+    
+    # Unit 6 Data
+    u6_gen = st.number_input("U6 Gen (MU)", 12.0, key="u6g")
+    u6_hr = st.number_input("U6 HR", 2420.0, key="u6h") # Critical
+    
+    # Unit 7 Data
+    u7_gen = st.number_input("U7 Gen (MU)", 11.5, key="u7g")
+    u7_hr = st.number_input("U7 HR", 2360.0, key="u7h") # Risk
+    
+    # Unit 8 Data
+    u8_gen = st.number_input("U8 Gen (MU)", 12.2, key="u8g")
+    u8_hr = st.number_input("U8 HR", 2340.0, key="u8h") # Acceptable
+
+# --- 4. DATA PROCESSING (STOP IF FROZEN) ---
+if FREEZE:
+    st.warning("⚠️ SCREEN FROZEN FOR DISCUSSION")
+    st.stop()
+
+# Calculate States
+# Target HR assumed 2350 for all
+p6, d6, norm6 = calculate_kpis(u6_gen, u6_hr, 2350)
+p7, d7, norm7 = calculate_kpis(u7_gen, u7_hr, 2350)
+p8, d8, norm8 = calculate_kpis(u8_gen, u8_hr, 2350)
+
+# Store History for Animation Triggers
+if 'history' not in st.session_state:
+    st.session_state.history = {'U6': "ACCEPTABLE", 'U7': "ACCEPTABLE", 'U8': "ACCEPTABLE"}
+
+units = [
+    {"id": "6", "profit": p6, "delta": d6, "norm": norm6, "prev": st.session_state.history['U6']},
+    {"id": "7", "profit": p7, "delta": d7, "norm": norm7, "prev": st.session_state.history['U7']},
+    {"id": "8", "profit": p8, "delta": d8, "norm": norm8, "prev": st.session_state.history['U8']},
+]
+
+# --- 5. VISUAL LAYER: SUMMARY ROW ---
+st.title("🏭 Fleet Performance Review")
+
+cols = st.columns(3)
+
+worst_unit_id = None
+min_profit = float('inf')
+
+for i, u in enumerate(units):
+    # Determine Current State
+    state, color, css = get_scene(u['profit'])
+    
+    # Determine Animation Class (Strict Rule 5)
+    anim_class = ""
+    if EXEC_MODE:
+        if state == "CRITICAL" and u['prev'] != "CRITICAL":
+            anim_class = "anim-critical"
+        elif u['prev'] == "RISK" and state == "ACCEPTABLE":
+            anim_class = "anim-improve"
+    
+    # Update History
+    st.session_state.history[f"U{u['id']}"] = state
+    
+    # Track Worst Unit
+    if u['profit'] < min_profit:
+        min_profit = u['profit']
+        worst_unit_id = u['id']
+
+    # Render Card
+    with cols[i]:
+        st.markdown(f"""
+        <div class="unit-card {css} {anim_class}">
+            <div class="metric-title">UNIT–{u['id']}</div>
+            <div class="metric-value" style="color:{color}">₹ {u['profit']:,.0f}</div>
+            <div class="metric-delta">HR Δ: {u['delta']:+.0f} | ₹/MU: {u['norm']:,.0f}</div>
+            <div style="margin-top:10px; font-size:12px; color:#666;">STATUS: {state}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# --- 6. AUTO-SELECT WORST UNIT (Rule 6) ---
+st.divider()
+
+if worst_unit_id:
+    # Header logic
+    st.markdown(f"### 🔴 Priority Focus: UNIT–{worst_unit_id}")
+    
+    # Mock Root Cause Data (Dynamic based on selected worst unit)
+    # In real app, this queries the specific unit's detailed tags
+    c1, c2 = st.columns([2, 1])
+    
+    with c1:
+        # Rule 7: Root Cause Chart - Ranked
+        st.caption("DEVIATION PARETO (kcal/kWh Impact)")
         
-        st.markdown("**1. Generation & Efficiency**")
-        act_hr = st.number_input("Actual Heat Rate", value=2380.0, step=1.0)
-        gen_mu = st.number_input("Gross Gen (MU)", value=12.0, min_value=0.0)
+        # Simulating data based on unit ID for demo
+        data = {
+            'Parameter': ['Condenser Vacuum', 'MS Temp', 'Unburnt Carbon', 'RH Spray', 'Aux Power'],
+            'Loss (kcal)': [35, 12, 8, 5, 2] if worst_unit_id == "6" else [10, 40, 5, 5, 2]
+        }
+        df_loss = pd.DataFrame(data).sort_values("Loss (kcal)", ascending=True) # Ascending for horizontal bar to put largest top
         
-        st.markdown("**2. Technical Parameters**")
-        ms_temp = st.number_input("MS Temp (°C)", value=535.0)
-        vacuum = st.number_input("Vacuum (kg/cm²)", value=-0.90, max_value=0.0)
-        fg_temp = st.number_input("APH Out Temp (°C)", value=135.0)
-        spray = st.number_input("Total Spray (TPH)", value=15.0)
-        gcv = st.number_input("Coal GCV", value=3600.0)
+        fig = px.bar(
+            df_loss, 
+            x="Loss (kcal)", 
+            y="Parameter", 
+            orientation='h',
+            text="Loss (kcal)",
+            color="Loss (kcal)",
+            color_continuous_scale=['#444', '#ff3333'] # Dark to Red
+        )
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color='white',
+            height=300,
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False),
+            showlegend=False
+        )
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    with c2:
+        # Actionable Insight
+        st.caption("SHIFT IN-CHARGE ACTION")
+        top_loss = df_loss.iloc[-1]['Parameter'] # Last one is biggest in sorted list
+        loss_val = df_loss.iloc[-1]['Loss (kcal)']
         
-        run_btn = st.form_submit_button("🚀 UPDATE DASHBOARD")
-
-# --- 5. CALCULATION CORE ---
-# Financials
-units = gen_mu * 1_000_000
-hr_diff = TARGET_HR - act_hr
-kcal_saved = hr_diff * units
-escerts = kcal_saved / 10_000_000
-coal_saved = (kcal_saved / gcv) if gcv > 0 else 0
-carbon = (coal_saved / 1000) * 1.7
-trees = abs(carbon) * 40
-profit = (escerts * 1000) + (carbon * 500) + (coal_saved * 4.5)
-
-# Technical Losses
-loss_ms = max(0, (DESIGN_MS - ms_temp) * 1.2)
-loss_vac = max(0, ((vacuum - DESIGN_VAC) / 0.01) * 18) if vacuum > DESIGN_VAC else 0
-loss_fg = max(0, (fg_temp - 130) * 1.5)
-loss_spray = spray * 2.0
-loss_unaccounted = max(0, act_hr - (DESIGN_HR + loss_ms + loss_vac + loss_fg + loss_spray + 50))
-score_5s = max(0, 100 - ((loss_ms + loss_vac + loss_fg + loss_spray + loss_unaccounted)/3))
-
-# --- 6. HEADER & TICKER ---
-c1, c2 = st.columns([1, 6])
-with c1:
-    if anim_factory: st_lottie(anim_factory, height=80, key="logo")
-    else: st.markdown("<h1>🏭</h1>", unsafe_allow_html=True)
-with c2:
-    st.markdown("# 5S Power Command Center")
-    st.markdown("##### *Real-time Efficiency & Carbon Monitoring System*")
-
-# SCROLLING TICKER
-alerts = [f"ACTUAL HR: {act_hr}"]
-if loss_vac > 15: alerts.append("⚠️ CONDENSER VACUUM POOR")
-if loss_ms > 15: alerts.append("⚠️ MS TEMP LOW")
-if profit > 0: alerts.append("✅ PLANT IS PROFITABLE")
-else: alerts.append("🔥 PLANT IS BURNING CASH")
-ticker_content = "  |  ".join(alerts) + "  |  " + datetime.now().strftime("%H:%M:%S")
-
-st.markdown(f"""
-<div class="ticker-container">
-    <div class="ticker-text">{ticker_content}</div>
-</div>
-""", unsafe_allow_html=True)
-
-# --- 7. MAIN KPI DISPLAY (GLASS CARDS) ---
-k1, k2, k3, k4 = st.columns(4)
-
-with k1:
-    css_class = "card-profit" if profit >= 0 else "card-loss"
-    color = "#00ff00" if profit >= 0 else "#ff3333"
-    st.markdown(f"""
-    <div class="glass-card {css_class}">
-        <div class="metric-label">Daily Financial Impact</div>
-        <div class="metric-value" style="color: {color};">₹ {profit:,.0f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with k2:
-    st.markdown(f"""
-    <div class="glass-card">
-        <div class="metric-label">Station Heat Rate</div>
-        <div class="metric-value" style="color: #00ccff;">{act_hr:.0f}</div>
-        <div style="font-size: 12px; color: #888;">Target: {TARGET_HR}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with k3:
-    st.markdown(f"""
-    <div class="glass-card">
-        <div class="metric-label">PAT ESCerts</div>
-        <div class="metric-value" style="color: #ffcc00;">{escerts:.2f}</div>
-        <div style="font-size: 12px; color: #888;">1 Cert = 10 Gcal</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with k4:
-    color_score = "#00ff00" if score_5s > 80 else "#ff9900"
-    st.markdown(f"""
-    <div class="glass-card">
-        <div class="metric-label">Auto-5S Score</div>
-        <div class="metric-value" style="color: {color_score};">{score_5s:.1f}</div>
-        <div style="font-size: 12px; color: #888;">Cleanliness Index</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- 8. VISUAL TABS ---
-t1, t2, t3 = st.tabs(["📊 SPEEDOMETER & FINANCIALS", "🌱 NATURE & CARBON", "🔧 ROOT CAUSE ANALYSIS"])
-
-with t1:
-    c_left, c_right = st.columns([1, 1])
-    with c_left:
-        st.markdown("### 🏎️ Efficiency Gauge")
-        # Custom "Dark Mode" Speedometer
-        fig = go.Figure(go.Indicator(
-            mode = "gauge+number+delta", value = act_hr,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            delta = {'reference': TARGET_HR, 'increasing': {'color': "red"}},
-            gauge = {
-                'axis': {'range': [2000, 2600], 'tickwidth': 1, 'tickcolor': "white"},
-                'bar': {'color': "#00ccff"},
-                'bgcolor': "rgba(0,0,0,0)",
-                'borderwidth': 2,
-                'bordercolor': "#333",
-                'steps': [
-                    {'range': [2000, DESIGN_HR], 'color': "rgba(0, 255, 0, 0.3)"},
-                    {'range': [DESIGN_HR, TARGET_HR], 'color': "rgba(255, 255, 0, 0.3)"},
-                    {'range': [TARGET_HR, 2600], 'color': "rgba(255, 0, 0, 0.3)"}
-                ],
-                'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': act_hr}
-            }
-        ))
-        fig.update_layout(paper_bgcolor = "rgba(0,0,0,0)", font = {'color': "white", 'family': "Arial"})
-        st.plotly_chart(fig, use_container_width=True)
-
-    with c_right:
-        st.markdown("### 💡 Shift In-Charge Assistant")
-        if profit >= 0:
-            st.success("✅ **System Optimal:** Parameters are within limits. Maintain current load and soot blowing schedule.")
-        else:
-            st.error("⚠️ **Action Required:**")
-            if loss_vac > 15: st.markdown("- **Vacuum Low:** Check ejectors and gland sealing steam.")
-            if loss_ms > 15: st.markdown("- **Temp Low:** Check burner tilt and mill outlet temps.")
-            if loss_spray > 10: st.markdown("- **Excess Spray:** Check soot blowing; boiler might be fouled.")
-
-with t2:
-    col_env1, col_env2 = st.columns([1, 1])
-    with col_env1:
-        st.markdown("### 🌳 The Bio-Equivalent")
-        if profit >= 0:
-            if anim_wealth: st_lottie(anim_wealth, height=250, key="tree_good")
-            st.markdown(f"**You saved {trees:,.0f} Trees today!**")
-        else:
-            if anim_warning: st_lottie(anim_warning, height=250, key="tree_bad")
-            st.markdown(f"**Pollution Alert:** Equivalent to cutting **{trees:,.0f} Trees**.")
-
-    with col_env2:
-        st.info("ℹ️ **Calculation Logic:**")
-        st.markdown("""
-        * **Formula:** `Excess CO2 / 0.025`
-        * **Science:** A mature tree absorbs ~25kg CO2/year.
-        * **Context:** We convert your invisible gas emissions into visible "Trees Lost" to convey impact.
+        st.error(f"**Primary Driver:** {top_loss}")
+        st.markdown(f"""
+        **Impact:** {loss_val} kcal/kWh deviation.
+        
+        **Immediate Action:**
+        1. {"Check ejectors & air ingress" if "Vacuum" in top_loss else "Check burner tilt & mill fineness"}
+        2. Verify sensor calibration.
+        3. Review last 4 hours trend.
         """)
 
-with t3:
-    st.markdown("### 🔍 Where are we losing Heat? (kcal/kWh)")
-    losses = pd.DataFrame({
-        'Parameter': ['MS Temp', 'Vacuum', 'Flue Gas', 'Spray', 'Unaccounted'],
-        'Loss (kcal)': [loss_ms, loss_vac, loss_fg, loss_spray, loss_unaccounted]
-    })
-    fig_bar = px.bar(losses, x='Parameter', y='Loss (kcal)', color='Loss (kcal)', color_continuous_scale='Reds')
-    fig_bar.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="white")
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-# --- 9. HISTORY SAVE ---
-repo = init_github()
-if repo:
-    if st.button("💾 SAVE DATA TO GITHUB"):
-        new_row = pd.DataFrame([{"Date": date_in, "HR": act_hr, "Profit": profit, "ESCert": escerts}])
-        df_hist, sha = load_data(repo)
-        df_updated = pd.concat([df_hist, new_row]).drop_duplicates(subset=["Date"], keep='last') if not df_hist.empty else new_row
-        if save_data(repo, df_updated, sha):
-            st.success("✅ Data Secured in Cloud!")
-            st.balloons()
+# --- 7. FOOTER (CONTEXT) ---
+st.caption(f"Live Feed | Mode: {'EXECUTIVE' if EXEC_MODE else 'DEBUG'} | Last Update: {datetime.now().strftime('%H:%M:%S')}")
