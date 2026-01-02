@@ -10,17 +10,20 @@ from streamlit_lottie import st_lottie
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Power Plant 5S Eco-Dashboard", layout="wide", page_icon="🏭")
 
-# --- ASSETS ---
+# --- ASSETS (Robust Loader) ---
 def load_lottieurl(url):
     try:
-        r = requests.get(url)
-        if r.status_code != 200: return None
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200:
+            return None
         return r.json()
-    except: return None
+    except:
+        return None
 
-anim_profit = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_V9t630.json")
-anim_loss = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_t2yx0x1z.json")
-anim_factory = load_lottieurl("https://assets8.lottiefiles.com/packages/lf20_2glqweqs.json")
+# Load animations (Using stable host links)
+anim_profit = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
+anim_loss = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
+anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 
 # --- GITHUB CONNECTION ---
 def init_github():
@@ -54,10 +57,14 @@ def save_data(repo, df, sha):
         return True
     except: return False
 
-# --- MAIN APP ---
+# --- MAIN APP LAYOUT ---
 
 c1, c2 = st.columns([1, 4])
-with c1: st_lottie(anim_factory, height=100, key="factory")
+with c1: 
+    if anim_factory:
+        st_lottie(anim_factory, height=100, key="factory")
+    else:
+        st.markdown("# 🏭")
 with c2: 
     st.title("🏭 Smart 5S & Efficiency Dashboard")
     st.markdown("##### *Digitizing 5S: From Cleaning to Carbon Credits*")
@@ -87,6 +94,7 @@ with st.sidebar:
         
         st.markdown("---")
         st.markdown("**5S Parameters (Today's Avg)**")
+        # Note: No min/max limits here to allow for startups/shutdowns logic
         ms_temp = st.number_input("Main Steam Temp (°C)", value=535.0)
         vacuum = st.number_input("Condenser Vacuum (kg/cm2)", value=-0.90, max_value=0.0)
         fg_temp = st.number_input("Flue Gas Temp APH Out (°C)", value=135.0)
@@ -138,15 +146,16 @@ calc_5s_score = max(0, 100 - (total_controllable_loss / 2))
 gross_gen_units = gross_gen_mu * 1_000_000
 hr_diff_vs_target = TARGET_HEAT_RATE - calculated_actual_hr
 
-# PAT ESCerts
+# PAT ESCerts (1 MTOE = 10,000,000 kcal)
 total_kcal_saved = hr_diff_vs_target * gross_gen_units
 escerts = total_kcal_saved / 10_000_000
 
 # Carbon Credits
-coal_saved_kg = total_kcal_saved / coal_gcv
+# Coal saved (kg) = Heat Saved (kcal) / GCV
+coal_saved_kg = total_kcal_saved / coal_gcv if coal_gcv > 0 else 0
 carbon_credits = (coal_saved_kg / 1000) * 1.7 # 1.7 tCO2/tCoal
 
-# 4. FINANCIALS
+# 4. FINANCIALS (Estimates)
 ESCERT_PRICE = 1000
 CARBON_PRICE = 500
 COAL_PRICE = 4500
@@ -163,55 +172,59 @@ st.markdown("---")
 
 # A. SCORECARDS
 c1, c2, c3, c4 = st.columns(4)
+
+# Heat Rate
 c1.metric("Calculated Heat Rate", f"{calculated_actual_hr:.0f}", f"{calculated_actual_hr - DESIGN_HEAT_RATE:.0f} > Design", delta_color="inverse")
+
+# 5S Score
 c2.metric("Auto-5S Score", f"{calc_5s_score:.1f}/100", "Based on Parameters")
 
+# ESCerts
 if escerts > 0:
     c3.metric("PAT ESCerts", f"{escerts:.2f}", "Earned")
 else:
     c3.metric("PAT ESCerts", f"{escerts:.2f}", "Penalty Risk", delta_color="inverse")
 
+# Carbon Credits
 c4.metric("Carbon Credits", f"{carbon_credits:.2f}", "tCO2 Avoided")
 
-# B. HEAT RATE WATERFALL (Where is the efficiency going?)
+# B. HEAT RATE WATERFALL & ANIMATION
 st.subheader("📉 Heat Rate Deviation Analysis (The 'Why')")
 col_chart, col_anim = st.columns([2, 1])
 
 with col_chart:
-    fig_waterfall = go.Figure(go.Waterfall(
-        name = "20", orientation = "v",
-        measure = ["relative", "relative", "relative", "relative", "relative", "total"],
-        x = ["Design HR", "+ MS Temp Loss", "+ Vacuum Loss", "+ APH/FG Loss", "+ Spray Loss", "ACTUAL HR"],
-        text = [f"{DESIGN_HEAT_RATE}", f"+{loss_ms:.0f}", f"+{loss_vac:.0f}", f"+{loss_fg:.0f}", f"+{loss_spray:.0f}", f"{calculated_actual_hr:.0f}"],
-        y = [DESIGN_HEAT_RATE, loss_ms, loss_vac, loss_fg, loss_spray, 0], # Waterfall logic requires delta y
-        connector = {"line":{"color":"rgb(63, 63, 63)"}},
-        decreasing = {"marker":{"color":"#00FF00"}},
-        increasing = {"marker":{"color":"#FF4B4B"}}, # Red for losses (increasing HR)
-        totals = {"marker":{"color":"#FFFFFF"}}
-    ))
-    # Correcting the waterfall to start at base
-    fig_waterfall.update_traces(y=[DESIGN_HEAT_RATE, loss_ms, loss_vac, loss_fg, loss_spray, 0], selector=dict(type='waterfall'))
-    # Actually, Plotly waterfall handles start/end differently. Let's simplify for visual accuracy:
-    
-    # Simpler Bar Chart for Deviations
+    # Bar Chart for Deviations
     fig_dev = go.Figure()
     fig_dev.add_trace(go.Bar(
-        x=["MS Temp", "Vacuum (Condenser)", "Flue Gas (APH)", "Sprays"],
+        x=["MS Temp Loss", "Vacuum Loss", "Flue Gas Loss", "Spray Loss"],
         y=[loss_ms, loss_vac, loss_fg, loss_spray],
         marker_color='#FF4B4B',
-        text=[f"{loss_ms:.0f} kcal", f"{loss_vac:.0f} kcal", f"{loss_fg:.0f} kcal", f"{loss_spray:.0f} kcal"],
+        text=[f"{loss_ms:.0f}", f"{loss_vac:.0f}", f"{loss_fg:.0f}", f"{loss_spray:.0f}"],
         textposition='auto'
     ))
-    fig_dev.update_layout(title="Gap Analysis: Why are we deviating from Design?", yaxis_title="Heat Rate Loss (kcal/kWh)", template="plotly_dark")
+    fig_dev.update_layout(
+        title="Efficiency Losses (kcal/kWh) - Lower is Better", 
+        yaxis_title="Heat Rate Loss", 
+        template="plotly_dark",
+        height=350
+    )
     st.plotly_chart(fig_dev, use_container_width=True)
 
 with col_anim:
     st.markdown("### Daily Financial Impact")
+    
     if total_savings > 0:
-        st_lottie(anim_profit, height=200, key="win")
+        if anim_profit:
+            st_lottie(anim_profit, height=200, key="win")
+        else:
+            st.markdown("# 🌳💰")
         st.success(f"**Profit: ₹ {total_savings:,.0f}**")
+        
     else:
-        st_lottie(anim_loss, height=200, key="lose")
+        if anim_loss:
+            st_lottie(anim_loss, height=200, key="lose")
+        else:
+            st.markdown("# ⚠️🔥")
         st.error(f"**Loss: ₹ {total_savings:,.0f}**")
 
 # C. EXPLANATION
@@ -223,21 +236,29 @@ with st.expander("ℹ️ How Reference Values are Used?"):
        * *Formula:* Savings = (Target - Actual) × Generation.
     """)
 
-# D. GITHUB SAVE
+# D. GITHUB SAVE BUTTON
 repo = init_github()
-if repo and st.button("💾 Save Data"):
-    df_history, sha = load_data(repo)
-    new_row = pd.DataFrame([{
-        "Date": str(date_input),
-        "Gross_MU": gross_gen_mu,
-        "Heat_Rate": calculated_actual_hr,
-        "Calc_5S_Score": calc_5s_score,
-        "ESCert_Qty": escerts,
-        "Total_Savings_INR": total_savings
-    }])
-    if not df_history.empty:
-        df_updated = pd.concat([df_history, new_row], ignore_index=True)
-        df_updated.drop_duplicates(subset=["Date"], keep='last', inplace=True)
-    else: df_updated = new_row
-    save_data(repo, df_updated, sha)
-    st.success("✅ Saved!")
+if repo:
+    if st.button("💾 Save Data to History"):
+        df_history, sha = load_data(repo)
+        new_row = pd.DataFrame([{
+            "Date": str(date_input),
+            "Gross_MU": gross_gen_mu,
+            "Heat_Rate": calculated_actual_hr,
+            "Calc_5S_Score": calc_5s_score,
+            "ESCert_Qty": escerts,
+            "Total_Savings_INR": total_savings
+        }])
+        
+        if not df_history.empty:
+            df_updated = pd.concat([df_history, new_row], ignore_index=True)
+            df_updated.drop_duplicates(subset=["Date"], keep='last', inplace=True)
+        else:
+            df_updated = new_row
+            
+        if save_data(repo, df_updated, sha):
+            st.success("✅ Saved Successfully! Refresh the page to update history.")
+        else:
+            st.error("❌ Failed to save. Check permissions.")
+else:
+    st.warning("GitHub not connected. Check your Secrets.")
