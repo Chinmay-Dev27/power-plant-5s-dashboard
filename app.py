@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from github import Github
+from github import Github, Auth  # <--- Added Auth import
 from io import StringIO
 from datetime import datetime
 import requests
@@ -25,16 +25,21 @@ anim_profit = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c
 anim_loss = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 
-# --- GITHUB CONNECTION ---
+# --- GITHUB CONNECTION (FIXED) ---
 def init_github():
     try:
         if "GITHUB_TOKEN" in st.secrets:
             token = st.secrets["GITHUB_TOKEN"]
             repo_name = st.secrets["REPO_NAME"]
-            g = Github(token)
+            
+            # --- NEW AUTHENTICATION METHOD (2026 Compliant) ---
+            auth = Auth.Token(token)
+            g = Github(auth=auth)
+            
             repo = g.get_repo(repo_name)
             return repo
-    except: return None
+    except Exception as e:
+        return None
     return None
 
 def load_data(repo):
@@ -208,7 +213,8 @@ with col_chart:
         template="plotly_dark",
         height=350
     )
-    st.plotly_chart(fig_dev, use_container_width=True)
+    # FIX: Replaced use_container_width=True with width="stretch"
+    st.plotly_chart(fig_dev, width="stretch")
 
 with col_anim:
     st.markdown("### Daily Financial Impact")
