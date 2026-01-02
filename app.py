@@ -1,270 +1,249 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from github import Github, Auth  # <--- Added Auth import
+from github import Github, Auth
 from io import StringIO
 from datetime import datetime
 import requests
 from streamlit_lottie import st_lottie
 
-# --- CONFIGURATION ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Power Plant 5S Eco-Dashboard", layout="wide", page_icon="🏭")
 
-# --- ASSETS (Robust Loader) ---
+# --- ASSETS & STYLING ---
 def load_lottieurl(url):
     try:
-        r = requests.get(url, timeout=5)
-        if r.status_code != 200:
-            return None
-        return r.json()
-    except:
-        return None
+        r = requests.get(url, timeout=3)
+        return r.json() if r.status_code == 200 else None
+    except: return None
 
-# Load animations (Using stable host links)
-anim_profit = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
-anim_loss = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
-anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
+# Animations
+anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json") # Growing Tree
+anim_alert = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json") # Warning Triangle
+anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json") # Factory
 
-# --- GITHUB CONNECTION (FIXED) ---
+# Custom CSS to fill empty space and make metrics POP
+st.markdown("""
+    <style>
+    .big-banner-loss { 
+        padding: 20px; background-color: #5a0000; color: #ffcccc; 
+        border-radius: 10px; text-align: center; font-size: 24px; border: 2px solid #ff4b4b; margin-bottom: 20px;
+    }
+    .big-banner-win { 
+        padding: 20px; background-color: #004d00; color: #ccffcc; 
+        border-radius: 10px; text-align: center; font-size: 24px; border: 2px solid #00ff00; margin-bottom: 20px;
+    }
+    .metric-box {
+        background-color: #1E1E1E; padding: 15px; border-radius: 8px; border-left: 5px solid #FFC107;
+        margin-bottom: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- GITHUB CONNECTION ---
 def init_github():
     try:
         if "GITHUB_TOKEN" in st.secrets:
-            token = st.secrets["GITHUB_TOKEN"]
-            repo_name = st.secrets["REPO_NAME"]
-            
-            # --- NEW AUTHENTICATION METHOD (2026 Compliant) ---
-            auth = Auth.Token(token)
+            auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
             g = Github(auth=auth)
-            
-            repo = g.get_repo(repo_name)
-            return repo
-    except Exception as e:
-        return None
-    return None
+            return g.get_repo(st.secrets["REPO_NAME"])
+    except: return None
 
 def load_data(repo):
-    if not repo:
-         return pd.DataFrame(columns=["Date", "Gross_MU", "Heat_Rate", "Calc_5S_Score", "ESCert_Qty", "Total_Savings_INR"]), None
+    if not repo: return pd.DataFrame(), None
     try:
-        file = repo.get_contents("history_v3.csv", ref=st.secrets["BRANCH"])
-        csv_content = file.decoded_content.decode()
-        return pd.read_csv(StringIO(csv_content)), file.sha
-    except:
-        return pd.DataFrame(columns=["Date", "Gross_MU", "Heat_Rate", "Calc_5S_Score", "ESCert_Qty", "Total_Savings_INR"]), None
+        file = repo.get_contents("history_v4.csv", ref=st.secrets["BRANCH"])
+        return pd.read_csv(StringIO(file.decoded_content.decode())), file.sha
+    except: return pd.DataFrame(), None
 
 def save_data(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
-        if sha:
-            repo.update_file("history_v3.csv", "Daily Update", csv_content, sha, branch=st.secrets["BRANCH"])
-        else:
-            repo.create_file("history_v3.csv", "Initial Commit", csv_content, branch=st.secrets["BRANCH"])
+        msg = "Daily Update" if sha else "Initial Commit"
+        if sha: repo.update_file("history_v4.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("history_v4.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
-# --- MAIN APP LAYOUT ---
-
-c1, c2 = st.columns([1, 4])
-with c1: 
-    if anim_factory:
-        st_lottie(anim_factory, height=100, key="factory")
-    else:
-        st.markdown("# 🏭")
-with c2: 
-    st.title("🏭 Smart 5S & Efficiency Dashboard")
-    st.markdown("##### *Digitizing 5S: From Cleaning to Carbon Credits*")
-
-# ==========================================
-# SIDEBAR: CONFIGURATION & INPUTS
-# ==========================================
-
+# --- SIDEBAR CONFIG ---
 with st.sidebar:
-    st.header("⚙️ Reference Configuration")
-    with st.expander("Step 1: Set Design & Targets", expanded=False):
-        st.markdown("**1. Design Heat Rate (OEM):**")
-        DESIGN_HEAT_RATE = st.number_input("Design HR (kcal/kWh)", value=2250.0, step=10.0, help="The theoretical best HR from the BHEL/OEM manual.")
-        
-        st.markdown("**2. PAT Target (BEE):**")
-        TARGET_HEAT_RATE = st.number_input("Govt Target HR (kcal/kWh)", value=2350.0, step=10.0, help="The target assigned to you for PAT Cycle.")
-        
-        st.markdown("**3. Base Parameters (Design):**")
-        DESIGN_MS_TEMP = st.number_input("Design MS Temp (°C)", value=540.0)
-        DESIGN_VACUUM = st.number_input("Design Vacuum (kg/cm2)", value=-0.92)
-        DESIGN_FG_TEMP = st.number_input("Design FG Temp (°C)", value=130.0)
+    st.header("⚙️ Plant Configuration")
+    with st.expander("Design Data (Reference)", expanded=False):
+        DESIGN_HEAT_RATE = st.number_input("Design HR", 2250.0, step=10.0)
+        TARGET_HEAT_RATE = st.number_input("PAT Target HR", 2350.0, step=10.0)
+        DESIGN_MS_TEMP = st.number_input("Design MS Temp", 540.0)
+        DESIGN_VACUUM = st.number_input("Design Vacuum", -0.92)
+        DESIGN_FG_TEMP = st.number_input("Design FG Temp", 130.0)
 
-    st.header("📝 Daily Log Sheet")
+    st.header("📝 Daily Input")
     with st.form("daily_input"):
         date_input = st.date_input("Date", datetime.now())
-        gross_gen_mu = st.number_input("Gross Generation (MU)", value=12.0, min_value=0.0)
-        
+        gross_gen_mu = st.number_input("Gross Generation (MU)", 12.0, min_value=0.0)
         st.markdown("---")
-        st.markdown("**5S Parameters (Today's Avg)**")
-        # Note: No min/max limits here to allow for startups/shutdowns logic
-        ms_temp = st.number_input("Main Steam Temp (°C)", value=535.0)
-        vacuum = st.number_input("Condenser Vacuum (kg/cm2)", value=-0.90, max_value=0.0)
-        fg_temp = st.number_input("Flue Gas Temp APH Out (°C)", value=135.0)
+        st.markdown("**5S Parameters**")
+        ms_temp = st.number_input("MS Temp (°C)", 535.0)
+        vacuum = st.number_input("Vacuum (kg/cm2)", -0.90, max_value=0.0)
+        fg_temp = st.number_input("APH Out Temp (°C)", 135.0)
+        sh_spray = st.number_input("SH Spray (TPH)", 10.0)
+        rh_spray = st.number_input("RH Spray (TPH)", 5.0)
+        coal_gcv = st.number_input("Coal GCV", 3600.0)
         
-        st.markdown("**Boiler Cleaning (Soot/Ash)**")
-        sh_spray = st.number_input("Superheater Spray (TPH)", value=10.0)
-        rh_spray = st.number_input("Reheater Spray (TPH)", value=5.0)
-        
-        st.markdown("**Fuel Quality**")
-        coal_gcv = st.number_input("Coal GCV (kcal/kg)", value=3600.0)
-        
-        submitted = st.form_submit_button("🚀 Calculate Results")
+        submitted = st.form_submit_button("🚀 Run Analysis")
 
-# ==========================================
-# CALCULATION LOGIC
-# ==========================================
-
-# 1. DEVIATION CALCULATIONS (Heat Rate Waterfall)
-# We start from DESIGN and add penalties to reach ACTUAL.
-
-# MS Temp Penalty (Approx 1.2 kcal per deg deviation)
-dev_ms = DESIGN_MS_TEMP - ms_temp
-loss_ms = max(0, dev_ms * 1.2)
-
-# Vacuum Penalty (Approx 18 kcal per 0.01 deviation)
-dev_vac = vacuum - DESIGN_VACUUM 
-loss_vac = max(0, (dev_vac / 0.01) * 18) if dev_vac > 0 else 0
-
-# Flue Gas Penalty (Approx 1.5 kcal per deg deviation)
-dev_fg = fg_temp - DESIGN_FG_TEMP
-loss_fg = max(0, dev_fg * 1.5)
-
-# Spray Penalty (Enthalpy loss ~2 kcal per TPH)
+# --- CALCULATION LOGIC ---
+# Heat Rate Penalties
+loss_ms = max(0, (DESIGN_MS_TEMP - ms_temp) * 1.2)
+loss_vac = max(0, ((vacuum - DESIGN_VACUUM) / 0.01) * 18) if vacuum > DESIGN_VACUUM else 0
+loss_fg = max(0, (fg_temp - DESIGN_FG_TEMP) * 1.5)
 loss_spray = (sh_spray + rh_spray) * 2.0
-
-# Unaccounted/Constant Losses (Radiation, Blowdown etc - Fixed assumption)
-loss_constant = 50.0 
-
-# FINAL CALCULATED HEAT RATE
+loss_constant = 50.0
 calculated_actual_hr = DESIGN_HEAT_RATE + loss_ms + loss_vac + loss_fg + loss_spray + loss_constant
 
-# 2. 5S SCORE CALCULATION
-# 100 Points = Zero Controllable Loss.
-total_controllable_loss = loss_ms + loss_vac + loss_fg + loss_spray
-# Formula: Deduct 1 point for every 2 kcal deviation
-calc_5s_score = max(0, 100 - (total_controllable_loss / 2))
+# 5S Score
+calc_5s_score = max(0, 100 - ((loss_ms + loss_vac + loss_fg + loss_spray) / 2))
 
-# 3. REGULATORY SAVINGS (vs TARGET)
+# Savings & Credits
 gross_gen_units = gross_gen_mu * 1_000_000
 hr_diff_vs_target = TARGET_HEAT_RATE - calculated_actual_hr
-
-# PAT ESCerts (1 MTOE = 10,000,000 kcal)
 total_kcal_saved = hr_diff_vs_target * gross_gen_units
+
+# PAT (1 ESCert = 10 Gcal)
 escerts = total_kcal_saved / 10_000_000
 
-# Carbon Credits
-# Coal saved (kg) = Heat Saved (kcal) / GCV
+# Carbon
 coal_saved_kg = total_kcal_saved / coal_gcv if coal_gcv > 0 else 0
 carbon_credits = (coal_saved_kg / 1000) * 1.7 # 1.7 tCO2/tCoal
 
-# 4. FINANCIALS (Estimates)
+# Tree Equivalent (1 Tree absorbs ~25kg CO2/year -> ~0.025 Tons)
+# Inverse: 1 Ton CO2 = 40 Trees
+trees_impact = abs(carbon_credits) * 40 
+
+# Money
 ESCERT_PRICE = 1000
 CARBON_PRICE = 500
-COAL_PRICE = 4500
-monetary_pat = escerts * ESCERT_PRICE
-monetary_carbon = carbon_credits * CARBON_PRICE
-monetary_fuel = (coal_saved_kg / 1000) * COAL_PRICE
-total_savings = monetary_pat + monetary_carbon + monetary_fuel
+COAL_PRICE = 4.5 # Rs per kg
+monetary_total = (escerts * ESCERT_PRICE) + (carbon_credits * CARBON_PRICE) + (coal_saved_kg * COAL_PRICE)
 
-# ==========================================
-# VISUALIZATION
-# ==========================================
+# --- DASHBOARD HEADER ---
+col_head1, col_head2 = st.columns([1, 5])
+with col_head1:
+    if anim_factory: st_lottie(anim_factory, height=120, key="factory_head")
+    else: st.markdown("# 🏭")
+with col_head2:
+    st.title("Smart 5S & Efficiency Dashboard")
+    st.caption("Digitizing 5S: From Cleaning to Carbon Credits")
 
-st.markdown("---")
-
-# A. SCORECARDS
-c1, c2, c3, c4 = st.columns(4)
-
-# Heat Rate
-c1.metric("Calculated Heat Rate", f"{calculated_actual_hr:.0f}", f"{calculated_actual_hr - DESIGN_HEAT_RATE:.0f} > Design", delta_color="inverse")
-
-# 5S Score
-c2.metric("Auto-5S Score", f"{calc_5s_score:.1f}/100", "Based on Parameters")
-
-# ESCerts
-if escerts > 0:
-    c3.metric("PAT ESCerts", f"{escerts:.2f}", "Earned")
+# --- IMPACT BANNER (The "Eye Opener") ---
+if monetary_total >= 0:
+    st.markdown(f'<div class="big-banner-win">💰 PROFIT OF THE DAY: ₹ {monetary_total:,.0f}</div>', unsafe_allow_html=True)
 else:
-    c3.metric("PAT ESCerts", f"{escerts:.2f}", "Penalty Risk", delta_color="inverse")
+    st.markdown(f'<div class="big-banner-loss">🔥 LOSS OF THE DAY: ₹ {monetary_total:,.0f}</div>', unsafe_allow_html=True)
 
-# Carbon Credits
-c4.metric("Carbon Credits", f"{carbon_credits:.2f}", "tCO2 Avoided")
+# --- MAIN LAYOUT WITH TABS (Fills Empty Space) ---
+tab1, tab2, tab3 = st.tabs(["📊 Financial & PAT", "🌲 Carbon & Environment", "🔧 Technical 5S"])
 
-# B. HEAT RATE WATERFALL & ANIMATION
-st.subheader("📉 Heat Rate Deviation Analysis (The 'Why')")
-col_chart, col_anim = st.columns([2, 1])
-
-with col_chart:
-    # Bar Chart for Deviations
-    fig_dev = go.Figure()
-    fig_dev.add_trace(go.Bar(
-        x=["MS Temp Loss", "Vacuum Loss", "Flue Gas Loss", "Spray Loss"],
-        y=[loss_ms, loss_vac, loss_fg, loss_spray],
-        marker_color='#FF4B4B',
-        text=[f"{loss_ms:.0f}", f"{loss_vac:.0f}", f"{loss_fg:.0f}", f"{loss_spray:.0f}"],
-        textposition='auto'
-    ))
-    fig_dev.update_layout(
-        title="Efficiency Losses (kcal/kWh) - Lower is Better", 
-        yaxis_title="Heat Rate Loss", 
-        template="plotly_dark",
-        height=350
-    )
-    # FIX: Replaced use_container_width=True with width="stretch"
-    st.plotly_chart(fig_dev, width="stretch")
-
-with col_anim:
-    st.markdown("### Daily Financial Impact")
+# TAB 1: FINANCIALS & ESCERTS
+with tab1:
+    col1, col2 = st.columns([2, 1])
     
-    if total_savings > 0:
-        if anim_profit:
-            st_lottie(anim_profit, height=200, key="win")
-        else:
-            st.markdown("# 🌳💰")
-        st.success(f"**Profit: ₹ {total_savings:,.0f}**")
+    with col1:
+        st.subheader("PAT Scheme Performance (ESCerts)")
+        # Gauge Chart for Heat Rate (The Driver of ESCerts)
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = calculated_actual_hr,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "Station Heat Rate (kcal/kWh)"},
+            delta = {'reference': TARGET_HEAT_RATE, 'increasing': {'color': "red"}},
+            gauge = {
+                'axis': {'range': [DESIGN_HEAT_RATE - 50, TARGET_HEAT_RATE + 200]},
+                'bar': {'color': "#17202A"},
+                'steps': [
+                    {'range': [DESIGN_HEAT_RATE - 50, TARGET_HEAT_RATE], 'color': "#2ECC71"}, # Green Zone
+                    {'range': [TARGET_HEAT_RATE, TARGET_HEAT_RATE + 200], 'color': "#E74C3C"}], # Red Zone
+                'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': TARGET_HEAT_RATE}}
+        ))
+        st.plotly_chart(fig_gauge, width="stretch")
+
+    with col2:
+        st.markdown("### 📜 Certificate Impact")
+        st.markdown(f"""
+        <div class="metric-box">
+            <b>ESCert Quantity:</b><br>
+            <span style="font-size: 30px; color: {'#00FF00' if escerts > 0 else '#FF4B4B'}">
+                {escerts:,.2f}
+            </span>
+        </div>
+        <div class="metric-box">
+            <b>Est. Monetary Value:</b><br>
+            <span style="font-size: 30px;">₹ {escerts * ESCERT_PRICE:,.0f}</span>
+        </div>
+        """, unsafe_allow_html=True)
         
-    else:
-        if anim_loss:
-            st_lottie(anim_loss, height=200, key="lose")
+        if escerts < 0:
+            if anim_alert: st_lottie(anim_alert, height=150, key="alert_pat")
+            st.error(f"We are burning {abs(escerts):.2f} Certificates per day!")
+
+# TAB 2: ENVIRONMENT (TREES & CARBON)
+with tab2:
+    c_env1, c_env2 = st.columns([1, 1])
+    
+    with c_env1:
+        st.subheader("🌍 Carbon Footprint")
+        # Visualizing CO2
+        fig_co2 = go.Figure()
+        fig_co2.add_trace(go.Indicator(
+            mode = "number",
+            value = carbon_credits,
+            title = {"text": "Carbon Credits (tCO2 Avoided)"},
+            number = {'prefix': "+ " if carbon_credits > 0 else "", 'suffix': " Tons", 'font': {'size': 50, 'color': '#4CAF50' if carbon_credits > 0 else '#FF5252'}}
+        ))
+        fig_co2.update_layout(height=250)
+        st.plotly_chart(fig_co2, width="stretch")
+        
+    with c_env2:
+        st.subheader("🌲 The Tree Equivalent")
+        
+        if carbon_credits < 0:
+            st.warning(f"Today's excess emission is equivalent to cutting down **{trees_impact:,.0f} mature trees**.")
+            st.markdown("### 🪓 We need a forest to fix this.")
         else:
-            st.markdown("# ⚠️🔥")
-        st.error(f"**Loss: ₹ {total_savings:,.0f}**")
+            st.success(f"Today's savings is equivalent to planting **{trees_impact:,.0f} trees**!")
+            if anim_tree: st_lottie(anim_tree, height=200, key="tree_win")
 
-# C. EXPLANATION
-with st.expander("ℹ️ How Reference Values are Used?"):
-    st.markdown(f"""
-    1. **Design HR ({DESIGN_HEAT_RATE}):** We compare today's performance against this to calculate the **Losses** (Red Bars). 
-       * *Formula:* Actual = Design + (Vacuum Loss + Temp Loss + ...).
-    2. **PAT Target ({TARGET_HEAT_RATE}):** We compare the Calculated Actual against this to determine **ESCerts**.
-       * *Formula:* Savings = (Target - Actual) × Generation.
-    """)
+# TAB 3: TECHNICAL 5S (THE WHY)
+with tab3:
+    st.subheader("🔧 Heat Rate Deviation (The Root Cause)")
+    
+    # Waterfall Chart - Wide
+    fig_water = go.Figure(go.Waterfall(
+        name = "20", orientation = "v",
+        measure = ["relative", "relative", "relative", "relative", "relative", "total"],
+        x = ["Design HR", "MS Temp", "Vacuum", "Flue Gas", "Spray", "ACTUAL"],
+        y = [DESIGN_HEAT_RATE, loss_ms, loss_vac, loss_fg, loss_spray, 0],
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+        decreasing = {"marker":{"color":"#2ECC71"}},
+        increasing = {"marker":{"color":"#E74C3C"}},
+        totals = {"marker":{"color":"#FFFFFF"}}
+    ))
+    fig_water.update_layout(template="plotly_dark", height=400, title="Where are we losing efficiency?")
+    st.plotly_chart(fig_water, width="stretch")
+    
+    # 5S Score Display
+    st.markdown(f"### 🧹 Auto-5S Score: {calc_5s_score:.1f} / 100")
+    if calc_5s_score < 80:
+        st.info("💡 Tip: Improve Condenser Vacuum (Clean Tubes) to boost score.")
 
-# D. GITHUB SAVE BUTTON
+# --- GITHUB SAVE ---
 repo = init_github()
-if repo:
-    if st.button("💾 Save Data to History"):
-        df_history, sha = load_data(repo)
-        new_row = pd.DataFrame([{
-            "Date": str(date_input),
-            "Gross_MU": gross_gen_mu,
-            "Heat_Rate": calculated_actual_hr,
-            "Calc_5S_Score": calc_5s_score,
-            "ESCert_Qty": escerts,
-            "Total_Savings_INR": total_savings
-        }])
-        
-        if not df_history.empty:
-            df_updated = pd.concat([df_history, new_row], ignore_index=True)
-            df_updated.drop_duplicates(subset=["Date"], keep='last', inplace=True)
-        else:
-            df_updated = new_row
-            
-        if save_data(repo, df_updated, sha):
-            st.success("✅ Saved Successfully! Refresh the page to update history.")
-        else:
-            st.error("❌ Failed to save. Check permissions.")
-else:
-    st.warning("GitHub not connected. Check your Secrets.")
+if repo and st.button("💾 Save to History"):
+    df, sha = load_data(repo)
+    new_row = pd.DataFrame([{
+        "Date": str(date_input), "HR": calculated_actual_hr, "Score": calc_5s_score, 
+        "ESCert": escerts, "Profit": monetary_total
+    }])
+    if not df.empty:
+        df = pd.concat([df, new_row], ignore_index=True).drop_duplicates(subset=["Date"], keep='last')
+    else: df = new_row
+    
+    if save_data(repo, df, sha): st.success("Saved!")
