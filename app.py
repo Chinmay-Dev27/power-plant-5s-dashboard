@@ -2,253 +2,268 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from datetime import datetime
+import numpy as np
+from datetime import datetime, timedelta
+import requests
+from streamlit_lottie import st_lottie
 
 # --- 1. CONFIGURATION & CSS ---
-st.set_page_config(page_title="Fleet Command: 5S & Efficiency", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="5S Eco-Exhibition", layout="wide", page_icon="🌿")
+
+# --- 2. ASSETS & ANIMATIONS ---
+def load_lottieurl(url):
+    try:
+        r = requests.get(url, timeout=2)
+        return r.json() if r.status_code == 200 else None
+    except: return None
+
+# Load Animations (Robust)
+anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
+anim_factory = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
+anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
+    /* Global Styling */
+    .stApp { background: linear-gradient(to bottom, #0e1117, #161b22); }
+    .block-container { padding-top: 1rem; padding-bottom: 3rem; }
     
-    /* UNIT CARD STYLING */
-    .unit-card {
-        background-color: #0e1117;
-        border: 1px solid #30363d;
-        border-radius: 8px;
+    /* CARDS */
+    .metric-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
         padding: 15px;
         text-align: center;
-        transition: all 0.3s ease;
-        height: 100%;
+        backdrop-filter: blur(5px);
     }
+    .scene-good { border-top: 4px solid #00ff88; }
+    .scene-bad { border-top: 4px solid #ff3333; }
     
-    /* SCENE STATES */
-    .scene-critical { border-top: 5px solid #ff3333; box-shadow: 0 4px 20px rgba(255, 51, 51, 0.1); }
-    .scene-risk { border-top: 5px solid #ffb000; }
-    .scene-acceptable { border-top: 5px solid #00ccff; }
-    .scene-excellent { border-top: 5px solid #00ff88; box-shadow: 0 4px 20px rgba(0, 255, 136, 0.1); }
-
-    /* METRICS */
-    .metric-title { font-size: 16px; color: #8b949e; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px; }
-    .metric-value { font-size: 32px; font-weight: 700; margin: 0; }
-    .metric-sub { font-size: 13px; color: #8b949e; margin-top: 5px; }
+    /* TEXT */
+    .big-stat { font-size: 32px; font-weight: 700; margin: 0; }
+    .sub-stat { font-size: 14px; color: #aaa; }
     
-    /* ANIMATIONS (CSS Only - No Lottie Loops) */
-    @keyframes flash-red { 
-        0% { background-color: #0e1117; } 50% { background-color: #3b0e0e; } 100% { background-color: #0e1117; } 
+    /* TABS */
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #1c2128;
+        border-radius: 5px;
+        color: white;
+        font-size: 16px;
     }
-    .anim-critical { animation: flash-red 1s ease-in-out 1; }
-    
+    .stTabs [aria-selected="true"] {
+        background-color: #00ff88;
+        color: black;
+        font-weight: bold;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIC ENGINE (Now supports 3 Units) ---
+# --- 3. DATA GENERATOR (Mock History for Trends) ---
+@st.cache_data
+def get_mock_history():
+    dates = pd.date_range(end=datetime.now(), periods=30).tolist()
+    data = []
+    base_hr = 2380
+    for d in dates:
+        # Simulate improvement over time
+        noise = np.random.randint(-20, 20)
+        trend = -1 * (dates.index(d)) # Slow improvement
+        hr = base_hr + noise + trend
+        
+        # Calculate derived metrics
+        escerts = (2350 - hr) * 12 * 1_000_000 / 10_000_000
+        profit = escerts * 1000 + (np.random.randint(-5000, 5000))
+        
+        data.append({"Date": d, "Heat Rate": hr, "Profit": profit, "ESCerts": escerts})
+    return pd.DataFrame(data)
 
-def calculate_unit_performance(u_id, gen_mu, act_hr, inputs):
-    """
-    Calculates Financials, ESCerts, Carbon, and 5S Score for a single unit.
-    """
-    # 1. CONSTANTS (Design Data)
-    DESIGN_HR = 2250
+df_hist = get_mock_history()
+
+# --- 4. CALCULATION ENGINE ---
+def calculate_single_unit(u_id, gen, hr, inputs):
+    # Constants
     TARGET_HR = 2350
-    DESIGN_MS = 540
-    DESIGN_VAC = -0.92
-    DESIGN_FG = 130
+    DESIGN_HR = 2250
     COAL_GCV = 3600
     
-    # 2. TECHNICAL LOSS CALCULATION (For 5S Score)
-    # Unpack specific parameters for this unit
-    ms_temp = inputs.get('ms', 535)
-    vacuum = inputs.get('vac', -0.90)
-    fg_temp = inputs.get('fg', 135)
-    spray = inputs.get('spray', 15)
+    # Financials
+    kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
+    escerts = kcal_diff / 10_000_000
+    coal_saved_kg = kcal_diff / COAL_GCV
+    carbon = (coal_saved_kg / 1000) * 1.7
+    profit = (escerts * 1000) + (carbon * 500) + (coal_saved_kg * 4.5)
     
-    # Loss Logic
-    loss_ms = max(0, (DESIGN_MS - ms_temp) * 1.2)
-    loss_vac = max(0, ((vacuum - DESIGN_VAC) / 0.01) * 18) if vacuum > DESIGN_VAC else 0
-    loss_fg = max(0, (fg_temp - DESIGN_FG) * 1.5)
-    loss_spray = spray * 2.0
-    
-    # Unaccounted (The difference between calculated losses and actual input HR)
-    theoretical_hr = DESIGN_HR + loss_ms + loss_vac + loss_fg + loss_spray + 50
-    loss_unaccounted = max(0, act_hr - theoretical_hr)
-    
-    # 5S Score Formula (100 - weighted losses)
-    # We penalize Unaccounted loss heavily as it implies poor housekeeping/leaks
-    total_penalty = (loss_ms + loss_vac + loss_fg + loss_spray + (loss_unaccounted * 1.5))
-    score_5s = max(0, 100 - (total_penalty / 3))
-
-    # 3. REGULATORY CALCULATION (Carbon & ESCerts)
-    gross_gen_units = gen_mu * 1_000_000
-    hr_diff = TARGET_HR - act_hr
-    kcal_saved = hr_diff * gross_gen_units
-    
-    # PAT (1 ESCert = 10 Gcal)
-    escerts = kcal_saved / 10_000_000
-    
-    # Carbon
-    coal_saved_kg = kcal_saved / COAL_GCV if COAL_GCV > 0 else 0
-    carbon_credits = (coal_saved_kg / 1000) * 1.7 # 1.7 tCO2/tCoal
-    
-    # 4. FINANCIALS
-    # Prices
-    P_ESC = 1000
-    P_CARB = 500
-    P_COAL = 4500/1000 # Rs/kg
-    
-    profit = (escerts * P_ESC) + (carbon_credits * P_CARB) + (coal_saved_kg * P_COAL)
+    # Technical Loss (Simplified for display)
+    loss_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
+    loss_ms = max(0, (540 - inputs['ms']) * 1.2)
     
     return {
-        "id": u_id,
-        "profit": profit,
-        "hr_act": act_hr,
-        "hr_delta": act_hr - TARGET_HR,
-        "score_5s": score_5s,
-        "escerts": escerts,
-        "carbon": carbon_credits,
-        "losses": {
-            "Vacuum": loss_vac, "MS Temp": loss_ms, "Flue Gas": loss_fg, 
-            "Spray": loss_spray, "Unaccounted": loss_unaccounted
-        }
+        "id": u_id, "profit": profit, "hr": hr, "escerts": escerts, "carbon": carbon,
+        "losses": {"Vacuum": loss_vac, "MS Temp": loss_ms, "Spray": 5, "Unaccounted": 10}
     }
 
-def get_scene(profit):
-    if profit > 50000: return "EXCELLENT", "#00ff88", "scene-excellent"
-    elif profit >= 0: return "ACCEPTABLE", "#00ccff", "scene-acceptable"
-    elif profit >= -25000: return "RISK", "#ffb000", "scene-risk"
-    else: return "CRITICAL", "#ff3333", "scene-critical"
-
-# --- 3. SIDEBAR (PRESENTER INPUTS) ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
-    st.header("🔒 Presenter Mode")
-    EXEC_MODE = st.toggle("🎙️ Executive View", True)
+    st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
+    st.header("Exhibition Controls")
+    
+    st.markdown("### 🎛️ Live Unit Inputs")
+    u6_hr = st.slider("Unit-6 Heat Rate", 2200, 2600, 2410)
+    u7_hr = st.slider("Unit-7 Heat Rate", 2200, 2600, 2345)
+    u8_hr = st.slider("Unit-8 Heat Rate", 2200, 2600, 2330)
+
+# Process Data
+u6 = calculate_single_unit("6", 12.0, u6_hr, {'vac': -0.88, 'ms': 530})
+u7 = calculate_single_unit("7", 11.8, u7_hr, {'vac': -0.92, 'ms': 538})
+u8 = calculate_single_unit("8", 12.2, u8_hr, {'vac': -0.93, 'ms': 540})
+units = [u6, u7, u8]
+fleet_profit = sum(u['profit'] for u in units)
+
+# --- 6. MAIN TABS ---
+t_main, t_trends, t_sim, t_learn, t_gallery = st.tabs([
+    "🏭 Fleet Command", "📈 History & Trends", "🎮 What-If Simulator", "📚 Knowledge Bank", "🏆 5S Gallery"
+])
+
+# --- TAB 1: FLEET COMMAND (The CXO View) ---
+with t_main:
+    st.markdown(f"### ⚡ Real-Time Fleet Status")
+    
+    # Top Summary
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Fleet Net Profit (Daily)", f"₹ {fleet_total:,.0f}", delta_color="normal")
+    c2.metric("Total Carbon Avoided", f"{sum(u['carbon'] for u in units):,.1f} Tons", "vs Baseline")
+    c3.metric("Fleet Avg Heat Rate", f"{int((u6_hr+u7_hr+u8_hr)/3)} kcal/kWh")
     
     st.divider()
-    st.caption("Live Data Injection")
     
-    # UNIT 6 INPUTS
-    with st.expander("Unit 6 Parameters", expanded=True):
-        u6_gen = st.number_input("U6 Gen (MU)", 12.0)
-        u6_hr = st.number_input("U6 HR (kcal)", 2410.0) # High HR
-        u6_vac = st.number_input("U6 Vac", -0.88) # Poor Vac
+    # 3-Unit Cards
+    cols = st.columns(3)
+    for i, u in enumerate(units):
+        color = "#00ff88" if u['profit'] > 0 else "#ff3333"
+        border = "scene-good" if u['profit'] > 0 else "scene-bad"
+        
+        with cols[i]:
+            st.markdown(f"""
+            <div class="metric-card {border}">
+                <div class="sub-stat">UNIT - {u['id']}</div>
+                <div class="big-stat" style="color:{color}">₹ {u['profit']:,.0f}</div>
+                <div class="sub-stat">HR: {u['hr']} | ESCerts: {u['escerts']:.1f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Mini Graph for each unit
+            fig_mini = go.Figure(go.Indicator(
+                mode="gauge+number", value=u['hr'],
+                gauge={'axis': {'range': [2200, 2500]}, 'bar': {'color': color}}
+            ))
+            fig_mini.update_layout(height=120, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_mini, use_container_width=True)
+
+# --- TAB 2: HISTORY & TRENDS ---
+with t_trends:
+    st.markdown("### 📅 Performance Over Last 30 Days")
     
-    # UNIT 7 INPUTS
-    with st.expander("Unit 7 Parameters", expanded=False):
-        u7_gen = st.number_input("U7 Gen (MU)", 11.8)
-        u7_hr = st.number_input("U7 HR (kcal)", 2345.0) # Good HR
-        u7_vac = st.number_input("U7 Vac", -0.92)
+    # Interactive Plotly Charts
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Heat Rate Improvement Trend**")
+        fig_hr = px.line(df_hist, x="Date", y="Heat Rate", markers=True, template="plotly_dark")
+        fig_hr.add_hline(y=2350, line_dash="dash", line_color="green", annotation_text="Target")
+        st.plotly_chart(fig_hr, use_container_width=True)
+        
+    with c2:
+        st.markdown("**Financial Gains (Cumulative)**")
+        df_hist['CumProfit'] = df_hist['Profit'].cumsum()
+        fig_prof = px.area(df_hist, x="Date", y="CumProfit", template="plotly_dark", color_discrete_sequence=['#00ff88'])
+        st.plotly_chart(fig_prof, use_container_width=True)
 
-    # UNIT 8 INPUTS
-    with st.expander("Unit 8 Parameters", expanded=False):
-        u8_gen = st.number_input("U8 Gen (MU)", 12.2)
-        u8_hr = st.number_input("U8 HR (kcal)", 2330.0) # Excellent HR
-        u8_vac = st.number_input("U8 Vac", -0.93)
-
-# --- 4. PROCESSING ---
-# Pack inputs
-u6_data = calculate_unit_performance("6", u6_gen, u6_hr, {'vac': u6_vac})
-u7_data = calculate_unit_performance("7", u7_gen, u7_hr, {'vac': u7_vac})
-u8_data = calculate_unit_performance("8", u8_gen, u8_hr, {'vac': u8_vac})
-
-units = [u6_data, u7_data, u8_data]
-
-# Find Worst Unit
-worst_unit = min(units, key=lambda x: x['profit'])
-best_unit = max(units, key=lambda x: x['profit'])
-
-# --- 5. VISUAL LAYOUT ---
-
-# HEADER
-c1, c2 = st.columns([6, 1])
-with c1:
-    st.title("🏭 Fleet Performance Command")
-    st.caption(f"Real-time Review | Focus: {worst_unit['id']} | Last Update: {datetime.now().strftime('%H:%M')}")
-with c2:
-    # Aggregated Fleet Profit
-    fleet_total = sum(u['profit'] for u in units)
-    color = "#00ff88" if fleet_total >= 0 else "#ff3333"
-    st.markdown(f"<h3 style='color:{color}; text-align:right'>₹ {fleet_total:,.0f}</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:right; color:#666'>Fleet Net P&L</p>", unsafe_allow_html=True)
-
-st.divider()
-
-# A. UNIT SUMMARY ROW (Status First)
-cols = st.columns(3)
-for i, u in enumerate(units):
-    state, color, css = get_scene(u['profit'])
+# --- TAB 3: WHAT-IF SIMULATOR (Interactive) ---
+with t_sim:
+    st.markdown("### 🎮 The Efficiency Playground")
+    st.markdown("Adjust the sliders to see how much money you *could* save.")
     
-    # Animation Trigger (CSS)
-    anim = "anim-critical" if state == "CRITICAL" and EXEC_MODE else ""
+    col_in, col_out = st.columns([1, 2])
     
-    with cols[i]:
+    with col_in:
+        st.markdown("#### 🔧 Adjust Parameters")
+        sim_vac = st.slider("Improve Vacuum (kg/cm2)", -0.80, -0.95, -0.90)
+        sim_ms = st.slider("Improve MS Temp (°C)", 520, 545, 535)
+        sim_gen = st.slider("Unit Load (MW)", 300, 600, 500)
+    
+    with col_out:
+        # Simulation Math
+        base_hr = 2400
+        # Vacuum gain: 0.01 = 18 kcal
+        gain_vac = (sim_vac - (-0.80)) / 0.01 * 18 * -1
+        # MS Temp gain: 1 deg = 1.2 kcal
+        gain_ms = (sim_ms - 520) * 1.2
+        
+        new_hr = base_hr - gain_ms + gain_vac # Simplified logic
+        savings_kwh = (2400 - new_hr) * (sim_gen * 24 * 1000) / 3600 # kg coal approx
+        money_saved = savings_kwh * 4.5
+        
         st.markdown(f"""
-        <div class="unit-card {css} {anim}">
-            <div class="metric-title">UNIT – {u['id']}</div>
-            <div class="metric-value" style="color:{color}">₹ {u['profit']:,.0f}</div>
-            <div class="metric-sub">
-                HR: {u['hr_act']:.0f} <span style="color:#666">({u['hr_delta']:+.0f})</span>
-            </div>
-            <div class="metric-sub" style="margin-top:10px; border-top:1px solid #333; padding-top:5px;">
-                5S Score: <b>{u['score_5s']:.1f}</b> | ESCerts: <b>{u['escerts']:.1f}</b>
-            </div>
+        <div style="background:#1c2128; padding:20px; border-radius:10px; text-align:center;">
+            <h2>Potential Daily Savings</h2>
+            <h1 style="color:#00ff88; font-size:60px;">₹ {abs(money_saved):,.0f}</h1>
+            <p>By optimizing Vacuum to {sim_vac} and Temp to {sim_ms}</p>
         </div>
         """, unsafe_allow_html=True)
-
-# B. PRIORITY FOCUS SECTION (Auto-Selected)
-st.markdown("### ") # Spacer
-st.markdown(f"### 🔴 Priority Drill-Down: UNIT–{worst_unit['id']}")
-
-# Create 2 Columns: Root Cause Chart | Regulatory & 5S Impact
-drill_c1, drill_c2 = st.columns([2, 1])
-
-with drill_c1:
-    st.markdown("#### 📉 Efficiency Deviation Profile")
-    # Prepare Data for Chart
-    loss_data = pd.DataFrame(list(worst_unit['losses'].items()), columns=['Parameter', 'Loss'])
-    loss_data = loss_data.sort_values('Loss', ascending=True) # Sort for bar chart
-    
-    # Highlight the biggest bar
-    colors = ['#333'] * len(loss_data)
-    colors[-1] = '#ff3333' # Make the biggest loss RED
-    
-    fig = px.bar(
-        loss_data, x="Loss", y="Parameter", orientation='h', text="Loss",
-        color_discrete_sequence=['#ff3333']
-    )
-    fig.update_traces(marker_color=colors, texttemplate='%{text:.0f}', textposition='outside')
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        font_color='white', height=320, 
-        xaxis_title="Heat Rate Loss (kcal/kWh)", yaxis_title=None,
-        xaxis=dict(showgrid=False), margin=dict(l=0, r=0, t=20, b=0)
-    )
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-
-with drill_c2:
-    st.markdown("#### 🌍 Regulatory & 5S Impact")
-    
-    # 1. 5S Score Card (with context)
-    score = worst_unit['score_5s']
-    s_color = "#00ff88" if score > 80 else "#ff3333"
-    st.markdown(f"""
-    <div style="background:#161b22; padding:15px; border-radius:5px; border-left:4px solid {s_color}; margin-bottom:10px;">
-        <span style="color:#8b949e; font-size:12px;">AUTO-5S SCORE</span><br>
-        <span style="font-size:24px; font-weight:bold; color:{s_color}">{score:.1f} / 100</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 2. ESCerts & Carbon Grid
-    g1, g2 = st.columns(2)
-    with g1:
-        st.metric("PAT ESCerts", f"{worst_unit['escerts']:.1f}", delta_color="normal")
-    with g2:
-        st.metric("Carbon Credits", f"{worst_unit['carbon']:.1f}", delta_color="normal")
         
-    # 3. Action Recommendation
-    top_loss_param = loss_data.iloc[-1]['Parameter']
-    st.error(f"⚠️ **ACTION:** High losses in **{top_loss_param}**. Immediate {top_loss_param} system audit required.")
+        if anim_money: st_lottie(anim_money, height=200)
 
-# --- 6. FOOTER ---
-if not EXEC_MODE:
-    st.divider()
-    st.json(worst_unit) # Debug view
+# --- TAB 4: KNOWLEDGE BANK (Educational) ---
+with t_learn:
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.markdown("### 📚 What is PAT Scheme?")
+        st.info("""
+        **PAT (Perform, Achieve and Trade)** is a regulatory instrument by the Bureau of Energy Efficiency (BEE).
+        
+        * **Currency:** ESCert (Energy Saving Certificate)
+        * **Value:** 1 ESCert = 1 MTOE (Metric Tonne of Oil Equivalent)
+        * **Conversion:** 1 MTOE = **10 Million kCal**
+        """)
+        st.markdown("[🔗 Visit BEE India Official Site](https://beeindia.gov.in/)")
+        
+        st.markdown("### 🌍 Carbon Credit Logic")
+        st.markdown("""
+        * **Coal CO2:** Indian coal emits ~1.7 Tons of CO2 per Ton burned.
+        * **Tree Equivalent:** A mature tree absorbs ~25kg CO2/year.
+        * **Formula:** `Coal Saved (Tons) * 1.7 = Carbon Credits`
+        """)
+
+    with c2:
+        st.markdown("### 🧹 5S in Thermal Plants")
+        
+        st.markdown("""
+        1.  **Sort (Seiri):** Remove scrap metal from boiler floors.
+        2.  **Set in Order (Seiton):** Label all valves and drains clearly.
+        3.  **Shine (Seiso):** Clean condenser tubes (Improves Vacuum!).
+        4.  **Standardize (Seiketsu):** Daily checklists for soot blowing.
+        5.  **Sustain (Shitsuke):** Weekly audits and rewards.
+        """)
+        if anim_tree: st_lottie(anim_tree, height=200)
+
+# --- TAB 5: 5S GALLERY (Visuals) ---
+with t_gallery:
+    st.markdown("### 📸 5S Transformation Gallery")
+    
+    gc1, gc2, gc3 = st.columns(3)
+    with gc1:
+        st.image("https://via.placeholder.com/300x200?text=Before+5S", caption="Cluttered Boiler Floor")
+    with gc2:
+        st.markdown("## ➡️ TRANSFORMED ➡️")
+    with gc3:
+        st.image("https://via.placeholder.com/300x200/00ff88/000000?text=After+5S", caption="Clean & Labelled Floor")
+    
+    st.success("Cleanliness directly improves safety and reduces maintenance downtime by 15%.")
+
+# --- FOOTER ---
+st.markdown("---")
+st.caption("Designed for 5S Exhibition | Power Plant Efficiency Cell")
