@@ -226,7 +226,13 @@ with st.sidebar:
                 
                 st.markdown(f"**U{i} Emissions**")
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
+                # Conditional border for SOx
+                sox_border = "2px solid #ff3333" if sox > lim_sox else "2px solid #00ff88"
+                st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
+                
                 nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
+                nox_border = "2px solid #ff3333" if nox > lim_nox else "2px solid #00ff88"
+                st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
                 
                 units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
         
