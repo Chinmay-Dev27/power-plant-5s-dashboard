@@ -42,7 +42,6 @@ st.markdown("""
     /* SCENE COLORS */
     .border-good { border-top: 4px solid #00ff88; }
     .border-bad { border-top: 4px solid #ff3333; }
-    .border-warn { border-top: 4px solid #ffb000; }
     
     /* PLACARDS */
     .placard {
@@ -59,7 +58,34 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. CALCULATION ENGINE ---
+# --- 3. GITHUB ENGINE ---
+def init_github():
+    try:
+        if "GITHUB_TOKEN" in st.secrets:
+            auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
+            g = Github(auth=auth)
+            return g.get_repo(st.secrets["REPO_NAME"])
+    except: return None
+
+def load_history(repo):
+    if not repo: return pd.DataFrame()
+    try:
+        file = repo.get_contents("plant_history_v11.csv", ref=st.secrets["BRANCH"])
+        df = pd.read_csv(StringIO(file.decoded_content.decode()))
+        df['Date'] = pd.to_datetime(df['Date'])
+        return df, file.sha
+    except: return pd.DataFrame(columns=["Date", "Unit", "Profit", "HR", "SOx", "NOx"]), None
+
+def save_history(repo, df, sha):
+    try:
+        csv_content = df.to_csv(index=False)
+        msg = "Daily Update" if sha else "Init"
+        if sha: repo.update_file("plant_history_v11.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v11.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        return True
+    except: return False
+
+# --- 4. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals):
     # Unpack Design Values Specific to Unit
     TARGET_HR = design_vals['target_hr']
@@ -69,9 +95,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
     LIMIT_NOX = design_vals['limit_nox']
     
     # Financials
-    # Energy Diff: Positive = Savings, Negative = Loss
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
-    
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
@@ -103,7 +127,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc}
     }
 
-# --- 4. SIDEBAR INPUTS ---
+# --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
     st.title("Control Panel")
@@ -112,9 +136,9 @@ with st.sidebar:
     
     # --- TAB: CONFIG (Limits & Refs) ---
     with tab_config:
-        st.markdown("### 🌍 Emission Limits (Common)")
-        lim_sox = st.number_input("SOx Limit (mg/Nm3)", value=600)
-        lim_nox = st.number_input("NOx Limit (mg/Nm3)", value=450)
+        st.markdown("### 🌍 Emission Limits")
+        lim_sox = st.number_input("SOx Limit", value=600)
+        lim_nox = st.number_input("NOx Limit", value=450)
         
         st.markdown("### 🎯 Unit Targets")
         t_u1 = st.number_input("U1 Target HR", value=2300)
@@ -128,8 +152,8 @@ with st.sidebar:
 
     # --- TAB: DAILY INPUTS ---
     with tab_input:
+        date_in = st.date_input("Log Date", datetime.now())
         units_data = []
-        # Configurations mapping
         configs = [
             {'target_hr': t_u1, 'gcv': g_u1, 'limit_sox': lim_sox, 'limit_nox': lim_nox},
             {'target_hr': t_u2, 'gcv': g_u2, 'limit_sox': lim_sox, 'limit_nox': lim_nox},
@@ -156,9 +180,29 @@ with st.sidebar:
 # Calculate Fleet Totals
 fleet_profit = sum(u['profit'] for u in units_data)
 
-# --- 5. MAIN PAGE LAYOUT ---
+# --- 6. MAIN PAGE LAYOUT ---
 st.title("🏭 GMR Kamalanga Command Center")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
+
+# GLOBAL SAVE BUTTON (TOP RIGHT)
+col_head, col_btn = st.columns([6, 1])
+with col_btn:
+    if st.button("💾 Save to GitHub"):
+        repo = init_github()
+        if repo:
+            df_curr, sha = load_history(repo)
+            new_rows = []
+            for u in units_data:
+                new_rows.append({
+                    "Date": date_in, "Unit": u['id'], "Profit": u['profit'], 
+                    "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox']
+                })
+            df_new = pd.DataFrame(new_rows)
+            df_comb = pd.concat([df_curr, df_new], ignore_index=True) if not df_curr.empty else df_new
+            save_history(repo, df_comb, sha)
+            st.success("History Updated!")
+        else:
+            st.error("Check GitHub Secrets")
 
 # TABS NAVIGATION
 tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info"])
@@ -187,11 +231,16 @@ with tabs[0]:
             </div>
             """, unsafe_allow_html=True)
             
-            # Mini Compliance Status
-            if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
-                st.error(f"⚠️ Emission Breach (Limit: {u['limits']['sox']}/{u['limits']['nox']})")
+            # SPECIFIC SOx/NOx DISPLAY
+            s_val, n_val = u['sox'], u['nox']
+            s_lim, n_lim = u['limits']['sox'], u['limits']['nox']
+            
+            if s_val > s_lim or n_val > n_lim:
+                msg = f"⚠️ High Emissions<br>SOx: {s_val} | NOx: {n_val}"
+                st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; text-align:center; border:1px solid red;">{msg}</div>', unsafe_allow_html=True)
             else:
-                st.success("✅ Emissions Compliant")
+                msg = f"✅ Compliant<br>SOx: {s_val} | NOx: {n_val}"
+                st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; text-align:center; border:1px solid green;">{msg}</div>', unsafe_allow_html=True)
 
 # --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
 def render_unit_detail(u):
@@ -202,7 +251,6 @@ def render_unit_detail(u):
     
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
-        # Dynamic Target in Gauge
         target = configs[int(u['id'])-1]['target_hr']
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta", value = u['hr'],
@@ -214,7 +262,6 @@ def render_unit_detail(u):
             }
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        # FIXED: Replaced use_container_width=True with width="stretch"
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
 
     with c2:
@@ -222,14 +269,14 @@ def render_unit_detail(u):
         if u['profit'] > 0:
             if anim_tree: st_lottie(anim_tree, height=180, key=f"t_{u['id']}")
             st.success(f"**Great Job!** You avoided {abs(u['carbon']):.1f} tons of CO2.")
-            st.caption(f"Equivalent to planting **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres** of land.")
+            st.caption(f"Equivalent to planting **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres**.")
         else:
             if anim_smoke: st_lottie(anim_smoke, height=180, key=f"s_{u['id']}")
-            st.error(f"**High Emissions!** Excess {abs(u['carbon']):.1f} tons of CO2 released.")
-            st.warning(f"We need to plant **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres** to offset this damage.")
+            st.error(f"**High Emissions!** Excess {abs(u['carbon']):.1f} tons of CO2.")
+            st.warning(f"Offset required: **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres**.")
 
     with c3:
-        st.markdown("#### 📜 5S & Compliance Score")
+        st.markdown("#### 📜 5S & Compliance")
         score_col = "#00ff88" if u['score'] > 80 else "#ffb000"
         st.markdown(f"""
         <div class="glass-card" style="border-left: 5px solid {score_col}; text-align:left;">
@@ -239,24 +286,27 @@ def render_unit_detail(u):
         </div>
         """, unsafe_allow_html=True)
         
-        # SOx/NOx Alert Visuals
-        sox_col = "placard-green" if u['sox'] <= u['limits']['sox'] else "placard-red"
+        sox_stat = "⚠️ High" if u['sox'] > u['limits']['sox'] else "✅ Normal"
+        nox_stat = "⚠️ High" if u['nox'] > u['limits']['nox'] else "✅ Normal"
+        
         st.markdown(f"""
-        <div class="placard {sox_col}" style="padding:10px;">
-            <div class="p-title">Emission Risk</div>
-            <div class="p-val" style="font-size:18px;">SOx: {u['sox']} / NOx: {u['nox']}</div>
-            <div class="p-sub">{'✅ Safe Level' if u['sox'] <= u['limits']['sox'] else '⚠️ ACID RAIN RISK'}</div>
+        <div class="placard" style="padding:10px;">
+            <div class="p-title">SOx Status ({u['sox']})</div>
+            <div class="p-val" style="font-size:18px;">{sox_stat}</div>
+        </div>
+        <div class="placard" style="padding:10px;">
+            <div class="p-title">NOx Status ({u['nox']})</div>
+            <div class="p-val" style="font-size:18px;">{nox_stat}</div>
         </div>
         """, unsafe_allow_html=True)
 
     st.divider()
     
-    # Row 2: Detailed Placards (Glasscards)
+    # Row 2: Placards & Loss Analysis
     r2_c1, r2_c2 = st.columns([1, 2])
     
     with r2_c1:
         st.markdown("#### 💳 Certificate Wallet")
-        # ESCert Card
         val_esc = u['escerts'] * 1000 
         bg = "border-good" if val_esc > 0 else "border-bad"
         st.markdown(f"""
@@ -267,9 +317,8 @@ def render_unit_detail(u):
         </div>
         """, unsafe_allow_html=True)
         
-        # Carbon Credit Card
         val_carb = u['carbon']
-        carb_title = "CO2 Avoided (Credits)" if val_carb > 0 else "Excess CO2 (Penalty)"
+        carb_title = "CO2 Avoided" if val_carb > 0 else "Excess CO2"
         carb_color = "#00ccff" if val_carb > 0 else "#ff3333"
         st.markdown(f"""
         <div class="placard" style="border-left: 5px solid {carb_color};">
@@ -283,14 +332,27 @@ def render_unit_detail(u):
         st.markdown("#### 🔧 Loss Analysis (Pareto)")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss'])
         loss_df = loss_df.sort_values('Loss', ascending=True)
-        
-        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss',
-                        color='Loss', color_continuous_scale=['#444', '#ff3333'])
-        fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                             font_color='white', height=300, xaxis_title="Heat Rate Loss (kcal/kWh)")
+        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', color_continuous_scale=['#444', '#ff3333'])
+        fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=300)
         fig_bar.update_traces(texttemplate='%{text:.1f}')
-        # FIXED: Replaced use_container_width=True with width="stretch"
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
+    # --- NEW: HISTORY CHART FOR THIS UNIT ---
+    st.divider()
+    st.markdown("### 📈 Performance Trend (Last 30 Days)")
+    repo = init_github()
+    if repo:
+        df_hist, sha = load_history(repo)
+        if not df_hist.empty:
+            # Filter for this unit only
+            df_unit = df_hist[df_hist['Unit'] == u['id']]
+            if not df_unit.empty:
+                fig_hist = px.line(df_unit, x="Date", y=["HR", "Profit"], markers=True, template="plotly_dark")
+                st.plotly_chart(fig_hist, width="stretch", key=f"trend_{u['id']}")
+            else:
+                st.info(f"No history saved for Unit {u['id']} yet.")
+    else:
+        st.warning("GitHub not connected.")
 
 # --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
 with tabs[1]: render_unit_detail(units_data[0])
@@ -299,33 +361,10 @@ with tabs[3]: render_unit_detail(units_data[2])
 
 # --- TAB 5: INFO ---
 with tabs[4]:
-    st.markdown("### 📚 Calculation Breakdown")
+    st.markdown("### 📚 Reference & Logic")
     
-    info_c1, info_c2 = st.columns(2)
-    
-    with info_c1:
-        st.markdown("#### 📜 PAT Scheme Calculation")
-        st.markdown("""
-        <div class="glass-card">
-            <h3 style="color:#ffcc00">PAT ESCerts</h3>
-            <p><b>Formula:</b> <code>(Target HR - Actual HR) × Gen (MU) × 10⁶ / 10⁷</code></p>
-            <p>1 ESCert = 1 MTOE (Metric Tonne Oil Equivalent)</p>
-            <p>1 MTOE = 10 Million kcal Heat Energy</p>
-            <hr style="border-color:#444">
-            <p style="font-size:12px; color:#aaa">Example: If you save 10 kcal/kWh on 12 MU gen, you save 120 Million kcal = <b>12 ESCerts</b>.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with info_c2:
-        st.markdown("#### 🌍 Carbon Credit Calculation")
-        st.markdown("""
-        <div class="glass-card">
-            <h3 style="color:#00ccff">Carbon Credits (CCTS)</h3>
-            <p><b>Formula:</b> <code>Coal Saved (Tons) × 1.7</code></p>
-            <p><b>Step 1:</b> Calculate Heat Saved (kcal).</p>
-            <p><b>Step 2:</b> Convert to Coal (Heat / GCV).</p>
-            <p><b>Step 3:</b> Multiply by Emission Factor (1.7 Tons CO2/Ton Coal).</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
+    st.info("Formulas used align with BEE PAT Cycle notifications.")
+    st.table(pd.DataFrame({
+        "Metric": ["PAT ESCert", "Carbon Credit", "Tree Equivalent", "Acres Required"],
+        "Formula": ["(Target - Actual) * Gen / 10^7", "Coal Saved (Tons) * 1.7", "Excess CO2 / 0.025 Tons", "Trees / 500"]
+    }))
