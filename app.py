@@ -21,7 +21,6 @@ def load_lottieurl(url):
 
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
-anim_alert = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 
 st.markdown("""
     <style>
@@ -43,7 +42,6 @@ st.markdown("""
     /* SCENE COLORS */
     .border-good { border-top: 4px solid #00ff88; }
     .border-bad { border-top: 4px solid #ff3333; }
-    .border-warn { border-top: 4px solid #ffb000; }
     
     /* PLACARDS */
     .placard {
@@ -155,9 +153,9 @@ with tabs[0]:
             
             # Mini Compliance Status
             if u['sox'] > 600 or u['nox'] > 450:
-                st.error("⚠️ Emission Breach Detected")
+                st.error("⚠️ Emission Breach")
             else:
-                st.success("✅ Emissions Compliant")
+                st.success("✅ Emissions OK")
 
 # --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
 def render_unit_detail(u):
@@ -178,11 +176,11 @@ def render_unit_detail(u):
             }
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        st.plotly_chart(fig, use_container_width=True)
+        # FIX: Added unique key for Streamlit to track charts
+        st.plotly_chart(fig, use_container_width=True, key=f"gauge_{u['id']}")
 
     with c2:
         st.markdown("#### 🌳 Environmental Impact")
-        # Logic: If profit > 0 (Saving Carbon) -> Tree. Else -> Smoke.
         if u['profit'] > 0:
             if anim_tree: st_lottie(anim_tree, height=180, key=f"t_{u['id']}")
             st.success(f"Equivalent to planting **{u['trees']:,.0f} Trees**!")
@@ -203,7 +201,7 @@ def render_unit_detail(u):
         
         # SOx/NOx Alert
         if u['sox'] > 600:
-            st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red;">⚠️ SOx High: {u["sox"]} (Limit: 600)</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red;">⚠️ SOx High: {u["sox"]}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid green;">✅ SOx Normal: {u["sox"]}</div>', unsafe_allow_html=True)
 
@@ -237,7 +235,6 @@ def render_unit_detail(u):
 
     with r2_c2:
         st.markdown("#### 🔧 Loss Analysis (Pareto)")
-        # Sort losses
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss'])
         loss_df = loss_df.sort_values('Loss', ascending=True)
         
@@ -246,7 +243,8 @@ def render_unit_detail(u):
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                              font_color='white', height=300, xaxis_title="Heat Rate Loss (kcal/kWh)")
         fig_bar.update_traces(texttemplate='%{text:.1f}')
-        st.plotly_chart(fig_bar, use_container_width=True)
+        # FIX: Added unique key here too
+        st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_{u['id']}")
 
 # --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
 with tabs[1]: render_unit_detail(units_data[0])
