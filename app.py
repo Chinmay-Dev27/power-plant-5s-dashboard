@@ -9,6 +9,7 @@ from io import StringIO
 from github import Github, Auth
 from streamlit_lottie import st_lottie
 import streamlit.components.v1 as components
+import os 
 
 # --- 1. CONFIGURATION & CSS ---
 st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡")
@@ -31,23 +32,23 @@ def load_lottieurl(url):
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
-anim_bricks = load_lottieurl("https://lottie.host/9f5b6b6e-6b1e-4b1e-9b1e-6b1e6b1e6b1e/placeholder.json") # Placeholder
 
+# GMR COLORS: Blue #003399 | Orange #FF9933 | Red #FF3333 | Dark #002244
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
     
-    /* MAIN THEME */
+    /* MAIN THEME - GMR DARK BLUE GRADIENT */
     .stApp { 
-        background: linear-gradient(to bottom, #0e1117, #161b22); 
+        background: linear-gradient(to bottom, #001f3f, #003366); 
         font-family: 'Inter', sans-serif;
     }
     
     /* GLASS CARDS ENHANCED */
     .glass-card {
-        background: rgba(255, 255, 255, 0.05);
-        background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
-        backdrop-filter: blur(10px);
+        background: rgba(0, 34, 68, 0.6);
+        background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.2) 100%);
+        backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 16px;
         padding: 20px;
@@ -59,28 +60,30 @@ st.markdown("""
     }
     .glass-card:hover {
         transform: scale(1.02);
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
         box-shadow: 0 12px 40px rgba(0,0,0,0.4);
     }
     
-    /* SCENE COLORS */
-    .border-good { border-top: 4px solid #00ff88; }
-    .border-bad { border-top: 4px solid #ff3333; }
+    /* GMR BRANDED BORDERS */
+    .border-good { border-top: 4px solid #00ff88; } /* Keep Green for Good Performance */
+    .border-bad { border-top: 4px solid #FF3333; } /* GMR Red for Alert */
+    .border-gmr { border-top: 4px solid #FF9933; } /* GMR Orange for Neutral */
     
     /* PLACARDS */
     .placard {
-        background: #1c2128; padding: 15px; border-radius: 8px; 
+        background: #002244; padding: 15px; border-radius: 8px; 
         margin-bottom: 10px; text-align: left;
         transition: all 0.3s ease;
+        border-left: 4px solid #FF9933; /* GMR Orange Default */
     }
-    .placard:hover { background: #252b33; }
-    .p-title { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; font-weight: 400;}
+    .placard:hover { background: #003366; }
+    .p-title { font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; font-weight: 400;}
     .p-val { font-size: 24px; font-weight: 800; color: white; margin: 5px 0;}
-    .p-sub { font-size: 12px; color: #888; font-weight: 300; }
+    .p-sub { font-size: 12px; color: #aaa; font-weight: 300; }
     
     /* TEXT */
-    .big-money { font-size: 32px; font-weight: 800; }
-    .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; color: white; }
+    .big-money { font-size: 32px; font-weight: 800; color: #FF9933; } /* GMR Orange */
+    .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #ffffff33; padding-bottom: 10px; margin-bottom: 15px; color: white; }
     
     /* ANIMATIONS */
     @keyframes pulse {
@@ -97,8 +100,8 @@ st.markdown("""
     }
     
     /* PROGRESS BAR */
-    .progress { background: #333; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 5px; }
-    .progress-fill { height: 100%; background: linear-gradient(to right, #ff3333, #00ff88); transition: width 0.3s; }
+    .progress { background: #002244; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .progress-fill { height: 100%; background: linear-gradient(to right, #FF3333, #FF9933); transition: width 0.3s; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -114,7 +117,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v15.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v16.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -124,8 +127,8 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v15.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v15.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v16.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v16.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -133,7 +136,7 @@ def save_history(repo, df, sha):
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     # Unpack Design Values Specific to Unit
     TARGET_HR = design_vals['target_hr']
-    DESIGN_HR = 2250 
+    DESIGN_HR = 2250 # Fixed Design
     COAL_GCV = design_vals['gcv']
     LIMIT_SOX = design_vals['limit_sox']
     LIMIT_NOX = design_vals['limit_nox']
@@ -143,6 +146,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
+    
+    # Money
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
     # Trees & Land Logic
@@ -156,6 +161,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
     theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 
     l_unacc = max(0, hr - theo_hr - abs(l_vac))
+    
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
@@ -165,16 +171,17 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     specific_nox = inputs['nox'] / gen if gen > 0 else 0
     
     # ASH CALCULATIONS
-    # Coal Consumed (Tons) = Gen (MU) * HR (kcal/kWh) * 1000 / GCV
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_tons']
     ash_stocked = ash_gen - ash_util
     
-    # Brick Calc (Approx 1.5kg ash per brick -> 1 Ton = 666 Bricks)
+    # Brick Calc
     bricks_current = ash_util * 666
-    bricks_potential_total = ash_gen * 666 # If 100% util
-    bricks_zero = 0 # If 0% util
+    bricks_potential_total = ash_gen * 666
+    
+    # Burj Khalifa Logic (1 Burj Khalifa structure ~= 165 Million bricks equivalent volume)
+    burj_khalifa_count = bricks_current / 165_000_000
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
@@ -185,12 +192,18 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
         "emissions": {"carbon_intensity": carbon_intensity, "specific_sox": specific_sox, "specific_nox": specific_nox},
         "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
-                "bricks_made": bricks_current, "bricks_potential": bricks_potential_total}
+                "bricks_made": bricks_current, "bricks_potential": bricks_potential_total,
+                "burj_count": burj_khalifa_count}
     }
 
 # --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
-    components.html('<div class="pulse-icon">⚡</div>', height=50)
+    # GMR LOGO
+    try:
+        st.image("1000051706.png", use_container_width=True) 
+    except:
+        st.markdown("## **GMR POWER**") # Fallback if image missing
+        
     st.title("Control Panel")
     
     tab_input, tab_ash, tab_config = st.tabs(["📝 Daily", "🪨 Ash/Coal", "⚙️ Config"])
@@ -253,11 +266,11 @@ with st.sidebar:
                 
                 st.markdown(f"**U{i} Emissions**")
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-                sox_border = "2px solid #ff3333" if sox > lim_sox else "2px solid #00ff88"
+                sox_border = "2px solid #FF3333" if sox > lim_sox else "2px solid #00ff88"
                 st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
                 
                 nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
-                nox_border = "2px solid #ff3333" if nox > lim_nox else "2px solid #00ff88"
+                nox_border = "2px solid #FF3333" if nox > lim_nox else "2px solid #00ff88"
                 st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
                 
                 ash_p = {'ash_pct': coal_ash, 'util_tons': ash_utils[i-1]}
@@ -289,7 +302,7 @@ fleet_ash_util = sum(u['ash']['utilized'] for u in units_data)
 fleet_ash_stock = fleet_ash_gen - fleet_ash_util
 
 # Ash Pond Life Calculation
-daily_dump = max(1, fleet_ash_stock) # Avoid div by zero
+daily_dump = max(1, fleet_ash_stock)
 pond_days_left = (pond_cap - pond_curr) / daily_dump if daily_dump > 0 else 9999
 
 # --- 6. MAIN PAGE LAYOUT ---
@@ -306,16 +319,16 @@ with tabs[0]:
     
     # Alert Banner
     if fleet_profit < 0:
-        st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid red;">⚠️ Fleet Alert: Optimize Vacuum in U2 for ₹45k savings</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid #FF3333;">⚠️ Fleet Alert: Efficiency Loss Detected</div>', unsafe_allow_html=True)
     
-    cols = st.columns(4) # Changed to 4 columns to include Ash Pond Life
+    cols = st.columns(4) 
     
     # UNIT CARDS
     for i, u in enumerate(units_data):
-        color = "#00ff88" if u['profit'] > 0 else "#ff3333"
+        color = "#00ff88" if u['profit'] > 0 else "#FF3333"
         border = "border-good" if u['profit'] > 0 else "border-bad"
-        sox_col = "#ff3333" if u['sox'] > u['limits']['sox'] else "#00ff88"
-        nox_col = "#ff3333" if u['nox'] > u['limits']['nox'] else "#00ff88"
+        sox_col = "#FF3333" if u['sox'] > u['limits']['sox'] else "#00ff88"
+        nox_col = "#FF3333" if u['nox'] > u['limits']['nox'] else "#00ff88"
         
         with cols[i]:
             st.markdown(f"""
@@ -323,27 +336,27 @@ with tabs[0]:
                 <div class="unit-header">UNIT - {u['id']}</div>
                 <div class="big-money" style="color:{color}">₹ {u['profit']:,.0f}</div>
                 <div class="p-sub">Daily P&L Impact</div>
-                <hr style="border-color:#333; margin:15px 0;">
+                <hr style="border-color:#ffffff33; margin:15px 0;">
                 <div style="display:flex; justify-content:space-between; color:#ddd; margin-bottom:10px;">
                     <span>HR: <b>{u['hr']}</b></span>
                     <span>5S Score: <b>{u['score']:.1f}</b></span>
                 </div>
-                <div style="background:#111; padding:5px; border-radius:5px; font-size:13px;">
+                <div style="background:#001122; padding:5px; border-radius:5px; font-size:13px;">
                     <span style="color:{sox_col}">SOx: <b>{u['sox']}</b></span> | 
                     <span style="color:{nox_col}">NOx: <b>{u['nox']}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-    # ASH POND LIFE CARD (New 4th Column)
+    # ASH POND LIFE CARD
     with cols[3]:
-        pond_color = "#00ff88" if pond_days_left > 30 else "#ff3333"
+        pond_color = "#00ff88" if pond_days_left > 30 else "#FF3333"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {pond_color};">
             <div class="unit-header">ASH POND</div>
             <div class="big-money" style="color:{pond_color}">{pond_days_left:.0f} Days</div>
             <div class="p-sub">Capacity Remaining</div>
-            <hr style="border-color:#333; margin:15px 0;">
+            <hr style="border-color:#ffffff33; margin:15px 0;">
             <div style="font-size:13px; color:#ddd;">
                 Generation: <b>{fleet_ash_gen:.0f} T</b><br>
                 Utilized: <b>{fleet_ash_util:.0f} T</b>
@@ -363,11 +376,11 @@ def render_unit_detail(u, configs):
         target = configs[int(u['id'])-1]['target_hr']
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta", value = u['hr'],
-            delta = {'reference': target, 'increasing': {'color': "red"}},
+            delta = {'reference': target, 'increasing': {'color': "#FF3333"}},
             gauge = {
                 'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
                 'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
-                'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
+                'threshold': {'line': {'color': "#FF3333", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white', template='plotly_dark')
@@ -386,7 +399,7 @@ def render_unit_detail(u, configs):
 
     with c3:
         st.markdown("#### 📜 5S & Compliance")
-        score_col = "#00ff88" if u['score'] > 80 else "#ffb000"
+        score_col = "#00ff88" if u['score'] > 80 else "#FF9933"
         st.markdown(f"""
         <div class="glass-card" style="border-left: 5px solid {score_col}; text-align:left;">
             <div class="p-title">Auto-5S Score</div>
@@ -397,9 +410,9 @@ def render_unit_detail(u, configs):
         
         # Acid Rain Warning
         if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
-             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid #FF3333; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
         else:
-             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid green; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid #00ff88; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
 
     st.divider()
     
@@ -420,7 +433,7 @@ def render_unit_detail(u, configs):
         
         val_carb = u['carbon']
         carb_title = "CO2 Avoided" if val_carb > 0 else "Excess CO2"
-        carb_color = "#00ccff" if val_carb > 0 else "#ff3333"
+        carb_color = "#00ccff" if val_carb > 0 else "#FF3333"
         st.markdown(f"""
         <div class="placard" style="border-left: 5px solid {carb_color};">
             <div class="p-title">{carb_title}</div>
@@ -432,9 +445,9 @@ def render_unit_detail(u, configs):
     with r2_c2:
         st.markdown("#### 🔧 Loss Analysis (Pareto)")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss'])
-        loss_df = loss_df.sort_values('Loss', ascending=True).head(3)  # Top 3
+        loss_df = loss_df.sort_values('Loss', ascending=True).head(3)
         fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
-                         color_continuous_scale=['#444', '#ff3333'], template='plotly_dark')
+                         color_continuous_scale=['#444', '#FF3333'], template='plotly_dark')
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=300)
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         fig_bar.update_xaxes(showgrid=True, gridcolor='#333')
@@ -467,12 +480,21 @@ with tabs[4]:
     
     with ash1:
         st.markdown("#### 🧱 Brick Manufacturing Potential")
-        # Fleet total bricks
         total_bricks = sum(u['ash']['bricks_made'] for u in units_data)
-        zero_bricks = 0 # Baseline
+        
+        # BURJ KHALIFA LOGIC
+        total_burjs = sum(u['ash']['burj_count'] for u in units_data)
         
         st.info(f"**Current Utilization:** Enough to make **{total_bricks:,.0f} Bricks** today.")
-        st.caption("Calculation: ~1.5kg Ash per Fly Ash Brick")
+        
+        # BURJ KHALIFA METRIC DISPLAY
+        st.markdown(f"""
+        <div style="background: linear-gradient(to right, #002244, #003366); padding: 15px; border-radius: 10px; border: 1px solid #FF9933; margin-top: 10px;">
+            <h4 style="color: #FF9933; margin:0;">🏙️ Burj Khalifa Scale</h4>
+            <p style="color: white; font-size: 18px;">With this amount of ash, you could build <b style="font-size: 24px; color: #00ff88;">{total_burjs:.2f}</b> Burj Khalifas!</p>
+            <p style="font-size: 11px; color: #aaa;">(Equivalent material volume)</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Comparison Chart
         df_ash = pd.DataFrame({
@@ -486,14 +508,13 @@ with tabs[4]:
     with ash2:
         st.markdown("#### 🌊 Ash Pond Survival")
         
-        # Gauge for Pond Life
         fig_pond = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = pond_days_left,
             title = {'text': "Days to Overflow"},
             gauge = {
-                'axis': {'range': [0, 3650]}, # 10 years max on gauge
-                'bar': {'color': "#00ff88" if pond_days_left > 365 else "#ff3333"},
+                'axis': {'range': [0, 3650]}, 
+                'bar': {'color': "#00ff88" if pond_days_left > 365 else "#FF3333"},
                 'steps': [
                     {'range': [0, 180], 'color': "rgba(255,0,0,0.3)"},
                     {'range': [180, 3650], 'color': "rgba(0,255,0,0.1)"}
@@ -523,13 +544,21 @@ with tabs[4]:
 
 # --- TAB 6: INFO ---
 with tabs[5]:
-    st.markdown("### 📚 Calculation Breakdown")
+    st.markdown("### 📚 Plant Overview & Logic")
+    
+    # PLANT IMAGE HERE
+    try:
+        st.image("1000051705.jpg", caption="GMR Kamalanga Energy Limited", use_container_width=True)
+    except:
+        st.info("Plant image not found. Please upload '1000051705.jpg' to the folder.")
+
+    st.divider()
     info_c1, info_c2 = st.columns(2)
     
     with info_c1:
         st.markdown("""
         <div class="glass-card">
-            <h3 style="color:#ffcc00">PAT ESCerts</h3>
+            <h3 style="color:#FF9933">PAT ESCerts</h3>
             <p><b>Formula:</b> <code>(Target HR - Actual HR) × Gen (MU) × 10⁶ / 10⁷</code></p>
             <p>1 ESCert = 1 MTOE (Metric Tonne Oil Equivalent)</p>
             <p>1 MTOE = 10 Million kcal Heat Energy</p>
@@ -547,18 +576,15 @@ with tabs[5]:
     
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
 
-# --- TAB 7: TRENDS (UPDATED) ---
+# --- TAB 7: TRENDS ---
 with tabs[6]:
     st.markdown("### 📈 Historical Performance")
-    
-    # Filter Selection
     period = st.radio("Select Period:", ["Last 7 Days (Weekly)", "Last 30 Days (Monthly)"], horizontal=True)
     
     repo = init_github()
     if repo:
         df_hist, sha = load_history(repo)
         if not df_hist.empty:
-            # Date Filtering Logic
             if "7 Days" in period:
                 cutoff = datetime.now() - timedelta(days=7)
             else:
@@ -598,9 +624,8 @@ with tabs[7]:
         s_fg = st.slider("FG Temp", 100, 160, 135)
         s_spray = st.slider("Spray", 0, 100, 20)
     with c_sim2:
-        # Simulate calculation
         sim_inputs = {'vac': s_vac, 'ms': s_ms, 'fg': s_fg, 'spray': s_spray, 'sox': 550, 'nox': 400}
-        sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0], {'ash_pct': 35, 'util_tons': 1000})  # Approx
+        sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0], {'ash_pct': 35, 'util_tons': 1000}) 
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Current Profit", f"₹ {units_data[0]['profit']:,.0f}")
@@ -612,7 +637,6 @@ with tabs[8]:
     st.markdown("### 🌿 Emissions Compliance & Carbon Accounting")
     st.divider()
     
-    # Fleet Emissions Summary - FIXED SUMS
     total_gen = sum(u['gen'] for u in units_data)
     fleet_carbon = sum(u['carbon'] for u in units_data)
     fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
@@ -631,15 +655,13 @@ with tabs[8]:
     with col4:
         st.metric("Carbon Intensity (Tons/MWh)", f"{fleet_ci:.2f}")
     
-    # Fleet Acid Rain Warning
     if fleet_sox > lim_sox or fleet_nox > lim_nox:
-        st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; border:1px solid red; text-align:center; margin:20px 0;">⚠️ FLEET ACID RAIN RISK<br>High Average SOx/NOx Levels</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; border:1px solid #FF3333; text-align:center; margin:20px 0;">⚠️ FLEET ACID RAIN RISK<br>High Average SOx/NOx Levels</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:15px; border-radius:8px; border:1px solid green; text-align:center; margin:20px 0;">✅ Fleet Safe Emissions</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:15px; border-radius:8px; border:1px solid #00ff88; text-align:center; margin:20px 0;">✅ Fleet Safe Emissions</div>', unsafe_allow_html=True)
     
     st.divider()
     
-    # Carbon Ledger
     st.markdown("#### 📊 Carbon Ledger")
     ledger_df = pd.DataFrame([
         {"Item": "Daily CO2", "Value": f"{fleet_carbon:.2f} Tons", "Offset": f"{sum(u['trees'] for u in units_data):,.0f} Trees"},
