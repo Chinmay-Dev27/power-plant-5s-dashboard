@@ -200,9 +200,9 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 with st.sidebar:
     # GMR LOGO
     try:
-        st.image("1000051706.png", use_container_width=True) 
+        st.image("1000051706.png", width="stretch") # Replaced use_container_width with width="stretch" per instructions
     except:
-        st.markdown("## **GMR POWER**") # Fallback if image missing
+        st.markdown("## **GMR POWER**") 
         
     st.title("Control Panel")
     
@@ -314,7 +314,16 @@ tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detai
 
 # --- TAB 1: WAR ROOM (Executive View) ---
 with tabs[0]:
-    st.markdown("### 🚁 Fleet Executive Summary")
+    # GMR LOGO IN WAR ROOM
+    c_logo, c_title = st.columns([1, 5])
+    with c_logo:
+        try:
+            st.image("1000051706.png", width="stretch") # GMR Logo
+        except:
+            st.write("GMR")
+    with c_title:
+        st.markdown("### 🚁 Fleet Executive Summary")
+    
     st.divider()
     
     # Alert Banner
@@ -540,7 +549,7 @@ with tabs[4]:
             "Ash Utilized (T)": f"{u['ash']['utilized']:,.0f}",
             "Utilization %": f"{(u['ash']['utilized']/u['ash']['generated']*100 if u['ash']['generated']>0 else 0):.1f}%"
         })
-    st.dataframe(pd.DataFrame(ash_table), use_container_width=True)
+    st.dataframe(pd.DataFrame(ash_table), width="stretch")
 
 # --- TAB 6: INFO ---
 with tabs[5]:
@@ -548,7 +557,7 @@ with tabs[5]:
     
     # PLANT IMAGE HERE
     try:
-        st.image("1000051705.jpg", caption="GMR Kamalanga Energy Limited", use_container_width=True)
+        st.image("1000051705.jpg", caption="GMR Kamalanga Energy Limited", width="stretch")
     except:
         st.info("Plant image not found. Please upload '1000051705.jpg' to the folder.")
 
@@ -668,4 +677,4 @@ with tabs[8]:
         {"Item": "ESCerts Offset", "Value": f"{sum(u['escerts'] for u in units_data):.2f} Certs", "Value (₹)": f"₹ {sum(u['escerts'] * 1000 for u in units_data):,.0f}"},
         {"Item": "Net Balance", "Value": "Towards Net-Zero", "Status": "🟢 Positive" if fleet_carbon < 0 else "🔴 Negative"}
     ])
-    st.dataframe(ledger_df, use_container_width=True)
+    st.dataframe(ledger_df, width="stretch")
