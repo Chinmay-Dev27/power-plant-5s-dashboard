@@ -42,6 +42,7 @@ st.markdown("""
     /* SCENE COLORS */
     .border-good { border-top: 4px solid #00ff88; }
     .border-bad { border-top: 4px solid #ff3333; }
+    .border-warn { border-top: 4px solid #ffb000; }
     
     /* PLACARDS */
     .placard {
@@ -141,7 +142,6 @@ with st.sidebar:
                 hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
                 
                 st.markdown(f"**U{i} Parameters**")
-                # FIX: Slider range extended to -0.98 to allow better vacuum input
                 vac = st.slider(f"Vacuum", -0.80, -0.98, -0.90, key=f"v{i}") 
                 ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
                 fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
@@ -214,7 +214,8 @@ def render_unit_detail(u):
             }
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        st.plotly_chart(fig, use_container_width=True, key=f"gauge_{u['id']}")
+        # FIXED: Replaced use_container_width=True with width="stretch"
+        st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
 
     with c2:
         st.markdown("#### 🌳 Nature's Feedback")
@@ -288,7 +289,8 @@ def render_unit_detail(u):
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                              font_color='white', height=300, xaxis_title="Heat Rate Loss (kcal/kWh)")
         fig_bar.update_traces(texttemplate='%{text:.1f}')
-        st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_{u['id']}")
+        # FIXED: Replaced use_container_width=True with width="stretch"
+        st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
 
 # --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
 with tabs[1]: render_unit_detail(units_data[0])
