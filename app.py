@@ -3,14 +3,14 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from io import StringIO
 from github import Github, Auth
 from streamlit_lottie import st_lottie
 
 # --- 1. CONFIGURATION & CSS ---
-st.set_page_config(page_title="GMR 5S Command", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡")
 
 # --- 2. ASSETS ---
 def load_lottieurl(url):
@@ -21,6 +21,7 @@ def load_lottieurl(url):
 
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
+anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 
 st.markdown("""
     <style>
@@ -70,7 +71,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v12.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v13.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -80,8 +81,8 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v12.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v12.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v13.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v13.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -166,8 +167,8 @@ with st.sidebar:
                 hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
                 
                 st.markdown(f"**U{i} Parameters**")
-                # FIX: Slider range allows -0.98
-                vac = st.slider(f"Vacuum", -0.80, -0.99, -0.90, step=0.01, format="%.2f", key=f"v{i}") 
+                # UPDATED: Changed Slider to Number Input for precision
+                vac = st.number_input(f"Vacuum (kg/cm2)", value=-0.90, step=0.001, format="%.3f", key=f"v{i}") 
                 ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
                 fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
                 spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
@@ -178,7 +179,7 @@ with st.sidebar:
                 
                 units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
         
-        # SAVE BUTTON RELOCATED HERE
+        # SAVE BUTTON
         st.markdown("---")
         if st.button("💾 Save to GitHub"):
             repo = init_github()
@@ -201,11 +202,11 @@ with st.sidebar:
 fleet_profit = sum(u['profit'] for u in units_data)
 
 # --- 6. MAIN PAGE LAYOUT ---
-st.title("🏭 GMR Kamalanga Command Center")
+st.title("🏭 GMR Kamalanga 5S Dashboard")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
 
 # TABS NAVIGATION
-tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info"])
+tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info", "📈 Trends", "🎮 Simulator"])
 
 # --- TAB 1: WAR ROOM (Executive View) ---
 with tabs[0]:
@@ -217,6 +218,10 @@ with tabs[0]:
         color = "#00ff88" if u['profit'] > 0 else "#ff3333"
         border = "border-good" if u['profit'] > 0 else "border-bad"
         
+        # SOx/NOx Status Colors
+        sox_col = "#ff3333" if u['sox'] > u['limits']['sox'] else "#aaaaaa"
+        nox_col = "#ff3333" if u['nox'] > u['limits']['nox'] else "#aaaaaa"
+        
         with cols[i]:
             st.markdown(f"""
             <div class="glass-card {border}">
@@ -224,18 +229,16 @@ with tabs[0]:
                 <div class="big-money" style="color:{color}">₹ {u['profit']:,.0f}</div>
                 <div class="p-sub">Daily P&L Impact</div>
                 <hr style="border-color:#333; margin:15px 0;">
-                <div style="display:flex; justify-content:space-between; color:#ddd;">
+                <div style="display:flex; justify-content:space-between; color:#ddd; margin-bottom:10px;">
                     <span>HR: <b>{u['hr']}</b></span>
                     <span>5S Score: <b>{u['score']:.1f}</b></span>
                 </div>
+                <div style="background:#111; padding:5px; border-radius:5px; font-size:13px;">
+                    <span style="color:{sox_col}">SOx: <b>{u['sox']}</b></span> | 
+                    <span style="color:{nox_col}">NOx: <b>{u['nox']}</b></span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            
-            # Mini Compliance Status
-            if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
-                st.error(f"⚠️ Emission Breach (Limit: {u['limits']['sox']}/{u['limits']['nox']})")
-            else:
-                st.success("✅ Emissions Compliant")
 
 # --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
 def render_unit_detail(u):
@@ -281,17 +284,11 @@ def render_unit_detail(u):
         </div>
         """, unsafe_allow_html=True)
         
-        # ACID RAIN WARNING
-        sox_col = "placard-green" if u['sox'] <= u['limits']['sox'] else "placard-red"
-        alert_msg = '✅ Safe Level' if u['sox'] <= u['limits']['sox'] else '⚠️ ACID RAIN RISK'
-        
-        st.markdown(f"""
-        <div class="placard {sox_col}" style="padding:10px;">
-            <div class="p-title">Emission Risk</div>
-            <div class="p-val" style="font-size:18px;">SOx: {u['sox']} / NOx: {u['nox']}</div>
-            <div class="p-sub">{alert_msg}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Acid Rain Warning
+        if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
+             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
+        else:
+             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid green; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
 
     st.divider()
     
@@ -330,23 +327,7 @@ def render_unit_detail(u):
         fig_bar.update_traces(texttemplate='%{text:.1f}')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
 
-    # --- HISTORY CHART ---
-    st.divider()
-    st.markdown("### 📈 Performance Trend (Last 30 Days)")
-    repo = init_github()
-    if repo:
-        df_hist, sha = load_history(repo)
-        if not df_hist.empty:
-            df_unit = df_hist[df_hist['Unit'] == u['id']]
-            if not df_unit.empty:
-                fig_hist = px.line(df_unit, x="Date", y=["HR", "Profit"], markers=True, template="plotly_dark")
-                st.plotly_chart(fig_hist, width="stretch", key=f"trend_{u['id']}")
-            else:
-                st.info(f"No history saved for Unit {u['id']} yet.")
-    else:
-        st.warning("GitHub not connected.")
-
-# --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
+# --- RENDER UNIT DETAILS ---
 with tabs[1]: render_unit_detail(units_data[0])
 with tabs[2]: render_unit_detail(units_data[1])
 with tabs[3]: render_unit_detail(units_data[2])
@@ -354,32 +335,73 @@ with tabs[3]: render_unit_detail(units_data[2])
 # --- TAB 5: INFO ---
 with tabs[4]:
     st.markdown("### 📚 Calculation Breakdown")
-    
     info_c1, info_c2 = st.columns(2)
     
     with info_c1:
-        st.markdown("#### 📜 PAT Scheme Calculation")
         st.markdown("""
         <div class="glass-card">
             <h3 style="color:#ffcc00">PAT ESCerts</h3>
             <p><b>Formula:</b> <code>(Target HR - Actual HR) × Gen (MU) × 10⁶ / 10⁷</code></p>
             <p>1 ESCert = 1 MTOE (Metric Tonne Oil Equivalent)</p>
             <p>1 MTOE = 10 Million kcal Heat Energy</p>
-            <hr style="border-color:#444">
-            <p style="font-size:12px; color:#aaa">Example: If you save 10 kcal/kWh on 12 MU gen, you save 120 Million kcal = <b>12 ESCerts</b>.</p>
         </div>
         """, unsafe_allow_html=True)
 
     with info_c2:
-        st.markdown("#### 🌍 Carbon Credit Calculation")
         st.markdown("""
         <div class="glass-card">
-            <h3 style="color:#00ccff">Carbon Credits (CCTS)</h3>
+            <h3 style="color:#00ccff">Carbon Credits</h3>
             <p><b>Formula:</b> <code>Coal Saved (Tons) × 1.7</code></p>
-            <p><b>Step 1:</b> Calculate Heat Saved (kcal).</p>
-            <p><b>Step 2:</b> Convert to Coal (Heat / GCV).</p>
-            <p><b>Step 3:</b> Multiply by Emission Factor (1.7 Tons CO2/Ton Coal).</p>
+            <p>1.7 is the weighted avg emission factor for Indian Coal.</p>
         </div>
         """, unsafe_allow_html=True)
     
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
+
+# --- TAB 6: TRENDS (UPDATED) ---
+with tabs[5]:
+    st.markdown("### 📈 Historical Performance")
+    
+    # Filter Selection
+    period = st.radio("Select Period:", ["Last 7 Days (Weekly)", "Last 30 Days (Monthly)"], horizontal=True)
+    
+    repo = init_github()
+    if repo:
+        df_hist, sha = load_history(repo)
+        if not df_hist.empty:
+            # Date Filtering Logic
+            if "7 Days" in period:
+                cutoff = datetime.now() - timedelta(days=7)
+            else:
+                cutoff = datetime.now() - timedelta(days=30)
+            
+            df_hist = df_hist[df_hist['Date'] >= cutoff]
+            
+            if not df_hist.empty:
+                st.markdown("#### Heat Rate Trend")
+                fig_hr = px.line(df_hist, x="Date", y="HR", color="Unit", markers=True, template="plotly_dark")
+                st.plotly_chart(fig_hr, width="stretch")
+                
+                st.markdown("#### Profit/Loss Trend")
+                fig_pl = px.bar(df_hist, x="Date", y="Profit", color="Unit", barmode="group", template="plotly_dark")
+                st.plotly_chart(fig_pl, width="stretch")
+            else:
+                st.warning("No data found for the selected period.")
+        else:
+            st.info("No history saved yet.")
+    else:
+        st.warning("GitHub not connected.")
+
+# --- TAB 7: SIMULATOR ---
+with tabs[6]:
+    st.markdown("### 🎮 What-If Simulator")
+    if anim_money: st_lottie(anim_money, height=150)
+    
+    c_sim1, c_sim2 = st.columns([1, 2])
+    with c_sim1:
+        s_vac = st.slider("Simulate Vacuum Improvement", -0.85, -0.99, -0.90)
+        s_gen = st.slider("Simulate Load (MW)", 300, 350, 350)
+    with c_sim2:
+        new_loss = (abs(s_vac) - 0.90) * 100 * 15 
+        savings = abs(new_loss * s_gen * 24 * 4.5)
+        st.metric("Potential Daily Savings", f"₹ {savings:,.0f}")
