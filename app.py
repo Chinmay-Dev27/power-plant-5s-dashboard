@@ -8,18 +8,9 @@ import requests
 from io import StringIO
 from github import Github, Auth
 from streamlit_lottie import st_lottie
-import streamlit.components.v1 as components
 
 # --- 1. CONFIGURATION & CSS ---
 st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡")
-
-# Import Google Fonts
-components.html(
-    """
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    """,
-    height=0,
-)
 
 # --- 2. ASSETS ---
 def load_lottieurl(url):
@@ -34,32 +25,19 @@ anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e40
 
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
-    
     /* MAIN THEME */
-    .stApp { 
-        background: linear-gradient(to bottom, #0e1117, #161b22); 
-        font-family: 'Inter', sans-serif;
-    }
+    .stApp { background: linear-gradient(to bottom, #0e1117, #161b22); }
     
-    /* GLASS CARDS ENHANCED */
+    /* GLASS CARDS */
     .glass-card {
         background: rgba(255, 255, 255, 0.05);
-        background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
         backdrop-filter: blur(10px);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
+        border-radius: 12px;
         padding: 20px;
         margin-bottom: 15px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         text-align: center;
-        transition: all 0.3s ease;
-        line-height: 1.4;
-    }
-    .glass-card:hover {
-        transform: scale(1.02);
-        background: rgba(255, 255, 255, 0.08);
-        box-shadow: 0 12px 40px rgba(0,0,0,0.4);
     }
     
     /* SCENE COLORS */
@@ -70,34 +48,14 @@ st.markdown("""
     .placard {
         background: #1c2128; padding: 15px; border-radius: 8px; 
         margin-bottom: 10px; text-align: left;
-        transition: all 0.3s ease;
     }
-    .placard:hover { background: #252b33; }
-    .p-title { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; font-weight: 400;}
-    .p-val { font-size: 24px; font-weight: 800; color: white; margin: 5px 0;}
-    .p-sub { font-size: 12px; color: #888; font-weight: 300; }
+    .p-title { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 1px;}
+    .p-val { font-size: 24px; font-weight: bold; color: white; margin: 5px 0;}
+    .p-sub { font-size: 12px; color: #888; }
     
     /* TEXT */
     .big-money { font-size: 32px; font-weight: 800; }
-    .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; color: white; }
-    
-    /* ANIMATIONS */
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-    }
-    .pulse-icon { animation: pulse 2s infinite; }
-    
-    /* RESPONSIVE */
-    @media (max-width: 768px) {
-        .glass-card { margin-bottom: 10px; padding: 15px; }
-        .stColumns .stColumn > div > div { display: block !important; }
-    }
-    
-    /* PROGRESS BAR */
-    .progress { background: #333; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 5px; }
-    .progress-fill { height: 100%; background: linear-gradient(to right, #ff3333, #00ff88); transition: width 0.3s; }
+    .unit-header { font-size: 20px; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -113,18 +71,18 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v13.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v14.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
-    except: return pd.DataFrame(columns=["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen"]), None
+    except: return pd.DataFrame(columns=["Date", "Unit", "Profit", "HR", "SOx", "NOx"]), None
 
 def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v13.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v13.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v14.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v14.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -161,24 +119,18 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
-    # Emissions Compliance Additions
-    carbon_intensity = (carbon_tons / gen) if gen > 0 else 0  # CO2/MWh
-    specific_sox = inputs['sox'] / gen if gen > 0 else 0  # SOx/MWh
-    specific_nox = inputs['nox'] / gen if gen > 0 else 0  # NOx/MWh
-    
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
         "escerts": escerts, "carbon": carbon_tons, 
         "trees": trees_count, "acres": acres_land,
         "score": score_5s, "sox": inputs['sox'], "nox": inputs['nox'],
         "limits": {'sox': LIMIT_SOX, 'nox': LIMIT_NOX},
-        "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
-        "emissions": {"carbon_intensity": carbon_intensity, "specific_sox": specific_sox, "specific_nox": specific_nox}
+        "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc}
     }
 
 # --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
-    components.html('<div class="pulse-icon">⚡</div>', height=50)  # Pulsing icon
+    st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
     st.title("Control Panel")
     
     tab_input, tab_config = st.tabs(["📝 Daily Data", "⚙️ Config"])
@@ -211,34 +163,25 @@ with st.sidebar:
         
         for i in range(1, 4):
             with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
-                gen = st.number_input(f"U{i} Gen (MU) ⚡", 0.0, 12.0, 8.4, key=f"g{i}")
-                hr = st.number_input(f"U{i} HR (kcal) 🌡️", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
+                gen = st.number_input(f"U{i} Gen (MU)", 0.0, 12.0, 8.4, key=f"g{i}")
+                hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
                 
                 st.markdown(f"**U{i} Parameters**")
-                vac = st.number_input(f"Vacuum (kg/cm2)", value=-0.90, step=0.001, format="%.3f", key=f"v{i}")
-                # Progress bar for vacuum
-                vac_progress = max(0, min(100, (vac + 0.92) / 0.01 * 100))
-                st.markdown(f'<div class="progress"><div class="progress-fill" style="width: {vac_progress}%"></div></div>', unsafe_allow_html=True)
-                
+                # UPDATED: Number Input for Vacuum (Precise)
+                vac = st.number_input(f"Vacuum (kg/cm2)", value=-0.900, step=0.001, format="%.3f", key=f"v{i}") 
                 ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
-                fg = st.number_input(f"FG Temp ☁️", 100, 160, 135, key=f"f{i}")
+                fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
                 spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
                 
                 st.markdown(f"**U{i} Emissions**")
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-                # Conditional border for SOx
-                sox_border = "2px solid #ff3333" if sox > lim_sox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
-                
                 nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
-                nox_border = "2px solid #ff3333" if nox > lim_nox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
                 
                 units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
         
-        # SAVE BUTTON
+        # SAVE BUTTON IN SIDEBAR
         st.markdown("---")
-        if st.button("💾 Save to GitHub"):
+        if st.button("💾 Save to GitHub", use_container_width=True):
             repo = init_github()
             if repo:
                 df_curr, sha = load_history(repo)
@@ -246,7 +189,7 @@ with st.sidebar:
                 for u in units_data:
                     new_rows.append({
                         "Date": date_in, "Unit": u['id'], "Profit": u['profit'], 
-                        "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen']
+                        "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox']
                     })
                 df_new = pd.DataFrame(new_rows)
                 df_comb = pd.concat([df_curr, df_new], ignore_index=True) if not df_curr.empty else df_new
@@ -263,16 +206,12 @@ st.title("🏭 GMR Kamalanga 5S Dashboard")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
 
 # TABS NAVIGATION
-tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info", "📈 Trends", "🎮 Simulator", "🌿 Compliance & Carbon"])
+tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info", "📈 Trends", "🎮 Simulator"])
 
 # --- TAB 1: WAR ROOM (Executive View) ---
 with tabs[0]:
     st.markdown("### 🚁 Fleet Executive Summary")
     st.divider()
-    
-    # Alert Banner
-    if fleet_profit < 0:
-        st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid red;">⚠️ Fleet Alert: Optimize Vacuum in U2 for ₹45k savings</div>', unsafe_allow_html=True)
     
     cols = st.columns(3)
     for i, u in enumerate(units_data):
@@ -280,8 +219,8 @@ with tabs[0]:
         border = "border-good" if u['profit'] > 0 else "border-bad"
         
         # SOx/NOx Status Colors
-        sox_col = "#ff3333" if u['sox'] > u['limits']['sox'] else "#00ff88"
-        nox_col = "#ff3333" if u['nox'] > u['limits']['nox'] else "#00ff88"
+        sox_col = "#ff3333" if u['sox'] > u['limits']['sox'] else "#aaaaaa"
+        nox_col = "#ff3333" if u['nox'] > u['limits']['nox'] else "#aaaaaa"
         
         with cols[i]:
             st.markdown(f"""
@@ -320,7 +259,7 @@ def render_unit_detail(u, configs):
                 'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
         ))
-        fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white', template='plotly_dark')
+        fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
 
     with c2:
@@ -345,11 +284,11 @@ def render_unit_detail(u, configs):
         </div>
         """, unsafe_allow_html=True)
         
-        # Acid Rain Warning
+        # ACID RAIN WARNING CARD
         if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
-             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:10px; border:2px solid red; text-align:center; font-weight:bold; animation: pulse 2s infinite;">⚠️ ACID RAIN RISK<br>Breach Detected</div>', unsafe_allow_html=True)
         else:
-             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid green; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:15px; border-radius:10px; border:2px solid green; text-align:center;">✅ Safe Emissions<br>Within Limits</div>', unsafe_allow_html=True)
 
     st.divider()
     
@@ -382,20 +321,18 @@ def render_unit_detail(u, configs):
     with r2_c2:
         st.markdown("#### 🔧 Loss Analysis (Pareto)")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss'])
-        loss_df = loss_df.sort_values('Loss', ascending=True).head(3)  # Top 3
-        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
-                         color_continuous_scale=['#444', '#ff3333'], template='plotly_dark')
+        loss_df = loss_df.sort_values('Loss', ascending=True)
+        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', color_continuous_scale=['#444', '#ff3333'])
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=300)
-        fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-        fig_bar.update_xaxes(showgrid=True, gridcolor='#333')
+        fig_bar.update_traces(texttemplate='%{text:.1f}')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
 
-# --- RENDER UNIT DETAILS ---
+# --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
 with tabs[1]: render_unit_detail(units_data[0], configs)
 with tabs[2]: render_unit_detail(units_data[1], configs)
 with tabs[3]: render_unit_detail(units_data[2], configs)
 
-# --- TAB 5: INFO ---
+# --- TAB 5: INFO (RESTORED GLASS CARDS) ---
 with tabs[4]:
     st.markdown("### 📚 Calculation Breakdown")
     info_c1, info_c2 = st.columns(2)
@@ -421,18 +358,15 @@ with tabs[4]:
     
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
 
-# --- TAB 6: TRENDS (UPDATED) ---
+# --- TAB 6: TRENDS ---
 with tabs[5]:
     st.markdown("### 📈 Historical Performance")
-    
-    # Filter Selection
     period = st.radio("Select Period:", ["Last 7 Days (Weekly)", "Last 30 Days (Monthly)"], horizontal=True)
     
     repo = init_github()
     if repo:
         df_hist, sha = load_history(repo)
         if not df_hist.empty:
-            # Date Filtering Logic
             if "7 Days" in period:
                 cutoff = datetime.now() - timedelta(days=7)
             else:
@@ -443,14 +377,10 @@ with tabs[5]:
             if not df_hist.empty:
                 st.markdown("#### Heat Rate Trend")
                 fig_hr = px.line(df_hist, x="Date", y="HR", color="Unit", markers=True, template="plotly_dark")
-                fig_hr.update_layout(showlegend=True, xaxis_title="Date", yaxis_title="HR (kcal/kWh)", font_color='white')
-                fig_hr.update_xaxes(showgrid=True, gridcolor='#333')
                 st.plotly_chart(fig_hr, width="stretch")
                 
                 st.markdown("#### Profit/Loss Trend")
                 fig_pl = px.bar(df_hist, x="Date", y="Profit", color="Unit", barmode="group", template="plotly_dark")
-                fig_pl.update_layout(showlegend=True, xaxis_title="Date", yaxis_title="Profit (₹)", font_color='white')
-                fig_pl.update_xaxes(showgrid=True, gridcolor='#333')
                 st.plotly_chart(fig_pl, width="stretch")
             else:
                 st.warning("No data found for the selected period.")
@@ -468,77 +398,7 @@ with tabs[6]:
     with c_sim1:
         s_vac = st.slider("Simulate Vacuum Improvement", -0.85, -0.99, -0.90)
         s_gen = st.slider("Simulate Load (MW)", 300, 350, 350)
-        s_ms = st.slider("MS Temp", 500, 550, 535)
-        s_fg = st.slider("FG Temp", 100, 160, 135)
-        s_spray = st.slider("Spray", 0, 100, 20)
     with c_sim2:
-        # Simulate calculation
-        sim_inputs = {'vac': s_vac, 'ms': s_ms, 'fg': s_fg, 'spray': s_spray, 'sox': 550, 'nox': 400}
-        sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0])  # Approx
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Current Profit", f"₹ {units_data[0]['profit']:,.0f}")
-        with col2:
-            st.metric("Simulated Profit", f"₹ {sim_unit['profit']:,.0f}", delta=f"{sim_unit['profit'] - units_data[0]['profit']:,.0f}")
-
-# --- NEW TAB 8: COMPLIANCE & CARBON ---
-with tabs[7]:
-    st.markdown("### 🌿 Emissions Compliance & Carbon Accounting")
-    st.divider()
-    
-    # Fleet Emissions Summary
-    fleet_carbon = sum(u['carbon'] for u in units_data)
-    fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
-    fleet_nox = sum(u['nox'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
-    fleet_ci = sum(u['emissions']['carbon_intensity'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Fleet CO2 (Tons)", f"{fleet_carbon:.2f}", delta=f"{fleet_carbon:.2f}")
-    with col2:
-        sox_comp = "✅" if fleet_sox < lim_sox else "❌"
-        st.metric(f"Avg SOx/MWh {sox_comp}", f"{fleet_sox:.1f}", delta=f"{fleet_sox - lim_sox:.1f}")
-    with col3:
-        nox_comp = "✅" if fleet_nox < lim_nox else "❌"
-        st.metric(f"Avg NOx/MWh {nox_comp}", f"{fleet_nox:.1f}", delta=f"{fleet_nox - lim_nox:.1f}")
-    with col4:
-        st.metric("Carbon Intensity (Tons/MWh)", f"{fleet_ci:.2f}")
-    
-    st.divider()
-    
-    # Carbon Ledger
-    st.markdown("#### 📊 Carbon Ledger")
-    ledger_df = pd.DataFrame([
-        {"Item": "Daily CO2", "Value": f"{fleet_carbon:.2f} Tons", "Offset": f"{sum(u['trees'] for u in units_data):,.0f} Trees"},
-        {"Item": "ESCerts Offset", "Value": f"{sum(u['escerts'] for u in units_data):.2f} Certs", "Value (₹)": f"₹ {sum(u['escerts'] * 1000 for u in units_data):,.0f}"},
-        {"Item": "Net Balance", "Value": "Towards Net-Zero", "Status": "🟢 Positive" if fleet_carbon < 0 else "🔴 Negative"}
-    ])
-    st.dataframe(ledger_df, use_container_width=True)
-    
-    # Historical Compliance (from GitHub)
-    repo = init_github()
-    if repo:
-        df_hist, _ = load_history(repo)
-        if not df_hist.empty:
-            df_hist['Year'] = df_hist['Date'].dt.year
-            current_year = datetime.now().year
-            yearly_emissions = df_hist[df_hist['Year'] == current_year].groupby('Unit').agg({
-                'SOx': 'sum', 'NOx': 'sum', 'Gen': 'sum'
-            }).reset_index()
-            yearly_emissions['Avg SOx/MWh'] = yearly_emissions['SOx'] / yearly_emissions['Gen']
-            yearly_emissions['Avg NOx/MWh'] = yearly_emissions['NOx'] / yearly_emissions['Gen']
-            
-            st.markdown("#### 📈 Yearly Compliance Trends")
-            fig_comp = px.bar(yearly_emissions, x='Unit', y=['Avg SOx/MWh', 'Avg NOx/MWh'], 
-                              barmode='group', template='plotly_dark', title="Annual Specific Emissions")
-            fig_comp.add_hline(y=lim_sox, line_dash="dash", line_color="red", annotation_text="SOx Limit")
-            fig_comp.add_hline(y=lim_nox, line_dash="dash", line_color="orange", annotation_text="NOx Limit")
-            fig_comp.update_layout(font_color='white', height=400)
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # Export Report Button
-            if st.button("📄 Export Compliance Report"):
-                csv = yearly_emissions.to_csv(index=False)
-                st.download_button("Download CSV", csv, "compliance_report.csv", "text/csv")
-    else:
-        st.warning("GitHub not connected for historical compliance data.")
+        new_loss = (abs(s_vac) - 0.90) * 100 * 15 
+        savings = abs(new_loss * s_gen * 24 * 4.5)
+        st.metric("Potential Daily Savings", f"₹ {savings:,.0f}")
