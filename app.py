@@ -59,21 +59,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 3. CALCULATION ENGINE ---
-def calculate_unit(u_id, gen, hr, inputs):
-    # Constants
-    TARGET_HR = 2300; DESIGN_HR = 2250; COAL_GCV = 3600
+def calculate_unit(u_id, gen, hr, inputs, design_vals):
+    # Unpack Design Values
+    TARGET_HR = design_vals['target_hr']
+    DESIGN_HR = design_vals['design_hr']
+    COAL_GCV = design_vals['gcv']
     
     # Financials
+    # Energy Diff: Positive = Savings, Negative = Loss
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
+    
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
-    carbon = (coal_saved_kg / 1000) * 1.7
+    carbon_tons = (coal_saved_kg / 1000) * 1.7
     
     # Money
-    profit = (escerts * 1000) + (carbon * 500) + (coal_saved_kg * 4.5)
+    profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
-    # Trees (1 Tree = 25kg CO2/yr)
-    trees = abs(carbon * 1000 / 25)
+    # Trees & Land Logic
+    # 1 Mature Tree absorbs ~25kg CO2/year (0.025 Tons)
+    # Density: Approx 500 trees per acre for a dense plantation
+    trees_count = abs(carbon_tons / 0.025)
+    acres_land = trees_count / 500
     
     # 5S Technical Score
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
@@ -88,8 +95,9 @@ def calculate_unit(u_id, gen, hr, inputs):
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
-        "escerts": escerts, "carbon": carbon, "trees": trees, "score": score_5s,
-        "sox": inputs['sox'], "nox": inputs['nox'],
+        "escerts": escerts, "carbon": carbon_tons, 
+        "trees": trees_count, "acres": acres_land,
+        "score": score_5s, "sox": inputs['sox'], "nox": inputs['nox'],
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc}
     }
 
@@ -98,24 +106,42 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
     st.title("Control Panel")
     
-    # Loop to create inputs for 3 units
-    units_data = []
-    for i in range(1, 4):
-        with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
-            gen = st.number_input(f"U{i} Gen (MU)", 0.0, 12.0, 8.4, key=f"g{i}")
-            hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
-            
-            st.markdown(f"**U{i} Parameters**")
-            vac = st.slider(f"Vacuum", -0.80, -0.96, -0.90, key=f"v{i}")
-            ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
-            fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
-            spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
-            
-            st.markdown(f"**U{i} Emissions**")
-            sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-            nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
-            
-            units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}))
+    # Tab Structure for cleaner sidebar
+    tab_input, tab_design = st.tabs(["📝 Daily Data", "🔧 Design Config"])
+    
+    # --- TAB: DESIGN CONFIG (New Feature) ---
+    with tab_design:
+        st.markdown("### ⚙️ Design Baselines")
+        st.info("Update these values based on Design/PG Test Data")
+        d_design_hr = st.number_input("Design Heat Rate (kcal/kWh)", value=2250)
+        d_target_hr = st.number_input("PAT Target HR (kcal/kWh)", value=2300)
+        d_gcv = st.number_input("Coal GCV (kcal/kg)", value=3600)
+        
+        design_params = {
+            'design_hr': d_design_hr,
+            'target_hr': d_target_hr,
+            'gcv': d_gcv
+        }
+
+    # --- TAB: DAILY INPUTS ---
+    with tab_input:
+        units_data = []
+        for i in range(1, 4):
+            with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
+                gen = st.number_input(f"U{i} Gen (MU)", 0.0, 12.0, 8.4, key=f"g{i}")
+                hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
+                
+                st.markdown(f"**U{i} Parameters**")
+                vac = st.slider(f"Vacuum", -0.80, -0.96, -0.90, key=f"v{i}")
+                ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
+                fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
+                spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
+                
+                st.markdown(f"**U{i} Emissions**")
+                sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
+                nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
+                
+                units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, design_params))
 
 # Calculate Fleet Totals
 fleet_profit = sum(u['profit'] for u in units_data)
@@ -151,7 +177,6 @@ with tabs[0]:
             </div>
             """, unsafe_allow_html=True)
             
-            # Mini Compliance Status
             if u['sox'] > 600 or u['nox'] > 450:
                 st.error("⚠️ Emission Breach")
             else:
@@ -168,25 +193,26 @@ def render_unit_detail(u):
         st.markdown("#### 🏎️ Efficiency Gauge")
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta", value = u['hr'],
-            delta = {'reference': 2300, 'increasing': {'color': "red"}},
+            delta = {'reference': design_params['target_hr'], 'increasing': {'color': "red"}},
             gauge = {
                 'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
-                'steps': [{'range': [2000, 2300], 'color': "rgba(0,255,0,0.2)"}, {'range': [2300, 2600], 'color': "rgba(255,0,0,0.2)"}],
+                'steps': [{'range': [2000, design_params['target_hr']], 'color': "rgba(0,255,0,0.2)"}, {'range': [design_params['target_hr'], 2600], 'color': "rgba(255,0,0,0.2)"}],
                 'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        # FIX: Added unique key for Streamlit to track charts
         st.plotly_chart(fig, use_container_width=True, key=f"gauge_{u['id']}")
 
     with c2:
-        st.markdown("#### 🌳 Environmental Impact")
+        st.markdown("#### 🌳 Nature's Feedback")
         if u['profit'] > 0:
             if anim_tree: st_lottie(anim_tree, height=180, key=f"t_{u['id']}")
-            st.success(f"Equivalent to planting **{u['trees']:,.0f} Trees**!")
+            st.success(f"**Great Job!** You avoided {abs(u['carbon']):.1f} tons of CO2.")
+            st.caption(f"Equivalent to planting **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres** of land.")
         else:
             if anim_smoke: st_lottie(anim_smoke, height=180, key=f"s_{u['id']}")
-            st.error(f"Pollution equal to cutting **{u['trees']:,.0f} Trees**.")
+            st.error(f"**High Emissions!** Excess {abs(u['carbon']):.1f} tons of CO2 released.")
+            st.warning(f"We need to plant **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres** to offset this damage.")
 
     with c3:
         st.markdown("#### 📜 5S & Compliance Score")
@@ -195,11 +221,10 @@ def render_unit_detail(u):
         <div class="glass-card" style="border-left: 5px solid {score_col}; text-align:left;">
             <div class="p-title">Auto-5S Score</div>
             <div class="p-val" style="color:{score_col}">{u['score']:.1f} / 100</div>
-            <div class="p-sub">Based on Vacuum, Temp & Leaks</div>
+            <div class="p-sub">Technical Hygiene Score</div>
         </div>
         """, unsafe_allow_html=True)
         
-        # SOx/NOx Alert
         if u['sox'] > 600:
             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red;">⚠️ SOx High: {u["sox"]}</div>', unsafe_allow_html=True)
         else:
@@ -213,23 +238,27 @@ def render_unit_detail(u):
     with r2_c1:
         st.markdown("#### 💳 Certificate Wallet")
         # ESCert Card
-        val_esc = u['escerts'] * 1000 # Approx Value
+        val_esc = u['escerts'] * 1000 
         bg = "border-good" if val_esc > 0 else "border-bad"
         st.markdown(f"""
         <div class="placard {bg}">
             <div class="p-title">PAT ESCert Value</div>
             <div class="p-val">₹ {val_esc:,.0f}</div>
-            <div class="p-sub">{u['escerts']:.2f} Certificates Accumulated</div>
+            <div class="p-sub">{u['escerts']:.2f} Certificates</div>
         </div>
         """, unsafe_allow_html=True)
         
         # Carbon Credit Card
         val_carb = u['carbon']
+        # LOGIC FIX: If Carbon is negative (excess emissions), title changes
+        carb_title = "CO2 Avoided (Credits)" if val_carb > 0 else "Excess CO2 (Penalty)"
+        carb_color = "#00ccff" if val_carb > 0 else "#ff3333"
+        
         st.markdown(f"""
-        <div class="placard" style="border-left: 5px solid #00ccff;">
-            <div class="p-title">Carbon Credits (CCTS)</div>
-            <div class="p-val">{val_carb:,.2f}</div>
-            <div class="p-sub">Tons of CO2 Avoided</div>
+        <div class="placard" style="border-left: 5px solid {carb_color};">
+            <div class="p-title">{carb_title}</div>
+            <div class="p-val">{abs(val_carb):,.2f} Tons</div>
+            <div class="p-sub">Based on Coal Savings</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -243,7 +272,6 @@ def render_unit_detail(u):
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
                              font_color='white', height=300, xaxis_title="Heat Rate Loss (kcal/kWh)")
         fig_bar.update_traces(texttemplate='%{text:.1f}')
-        # FIX: Added unique key here too
         st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_{u['id']}")
 
 # --- RENDER TABS 2, 3, 4 (UNIT DETAILS) ---
@@ -257,6 +285,6 @@ with tabs[4]:
     
     st.info("Formulas used align with BEE PAT Cycle notifications.")
     st.table(pd.DataFrame({
-        "Metric": ["PAT ESCert", "Carbon Credit", "Tree Equivalent", "5S Score"],
-        "Formula": ["(Target - Actual) * Gen / 10^7", "Coal Saved (Tons) * 1.7", "Excess CO2 / 0.025 Tons", "100 - Weighted Technical Losses"]
+        "Metric": ["PAT ESCert", "Carbon Credit", "Tree Equivalent", "Acres Required"],
+        "Formula": ["(Target - Actual) * Gen / 10^7", "Coal Saved (Tons) * 1.7", "Excess CO2 / 0.025 Tons", "Trees / 500"]
     }))
