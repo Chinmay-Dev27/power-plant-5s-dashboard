@@ -60,10 +60,12 @@ st.markdown("""
 
 # --- 3. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals):
-    # Unpack Design Values
+    # Unpack Design Values Specific to Unit
     TARGET_HR = design_vals['target_hr']
-    DESIGN_HR = design_vals['design_hr']
+    DESIGN_HR = 2250 # Fixed Design
     COAL_GCV = design_vals['gcv']
+    LIMIT_SOX = design_vals['limit_sox']
+    LIMIT_NOX = design_vals['limit_nox']
     
     # Financials
     # Energy Diff: Positive = Savings, Negative = Loss
@@ -77,8 +79,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
     # Trees & Land Logic
-    # 1 Mature Tree absorbs ~25kg CO2/year (0.025 Tons)
-    # Density: Approx 500 trees per acre for a dense plantation
     trees_count = abs(carbon_tons / 0.025)
     acres_land = trees_count / 500
     
@@ -98,6 +98,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
         "escerts": escerts, "carbon": carbon_tons, 
         "trees": trees_count, "acres": acres_land,
         "score": score_5s, "sox": inputs['sox'], "nox": inputs['nox'],
+        "limits": {'sox': LIMIT_SOX, 'nox': LIMIT_NOX},
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc}
     }
 
@@ -106,33 +107,42 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2933/2933886.png", width=50)
     st.title("Control Panel")
     
-    # Tab Structure for cleaner sidebar
-    tab_input, tab_design = st.tabs(["📝 Daily Data", "🔧 Design Config"])
+    tab_input, tab_config = st.tabs(["📝 Daily Data", "⚙️ Config"])
     
-    # --- TAB: DESIGN CONFIG (New Feature) ---
-    with tab_design:
-        st.markdown("### ⚙️ Design Baselines")
-        st.info("Update these values based on Design/PG Test Data")
-        d_design_hr = st.number_input("Design Heat Rate (kcal/kWh)", value=2250)
-        d_target_hr = st.number_input("PAT Target HR (kcal/kWh)", value=2300)
-        d_gcv = st.number_input("Coal GCV (kcal/kg)", value=3600)
+    # --- TAB: CONFIG (Limits & Refs) ---
+    with tab_config:
+        st.markdown("### 🌍 Emission Limits (Common)")
+        lim_sox = st.number_input("SOx Limit (mg/Nm3)", value=600)
+        lim_nox = st.number_input("NOx Limit (mg/Nm3)", value=450)
         
-        design_params = {
-            'design_hr': d_design_hr,
-            'target_hr': d_target_hr,
-            'gcv': d_gcv
-        }
+        st.markdown("### 🎯 Unit Targets")
+        t_u1 = st.number_input("U1 Target HR", value=2300)
+        g_u1 = st.number_input("U1 GCV", value=3600)
+        st.divider()
+        t_u2 = st.number_input("U2 Target HR", value=2310)
+        g_u2 = st.number_input("U2 GCV", value=3550)
+        st.divider()
+        t_u3 = st.number_input("U3 Target HR", value=2295)
+        g_u3 = st.number_input("U3 GCV", value=3620)
 
     # --- TAB: DAILY INPUTS ---
     with tab_input:
         units_data = []
+        # Configurations mapping
+        configs = [
+            {'target_hr': t_u1, 'gcv': g_u1, 'limit_sox': lim_sox, 'limit_nox': lim_nox},
+            {'target_hr': t_u2, 'gcv': g_u2, 'limit_sox': lim_sox, 'limit_nox': lim_nox},
+            {'target_hr': t_u3, 'gcv': g_u3, 'limit_sox': lim_sox, 'limit_nox': lim_nox}
+        ]
+        
         for i in range(1, 4):
             with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
                 gen = st.number_input(f"U{i} Gen (MU)", 0.0, 12.0, 8.4, key=f"g{i}")
                 hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
                 
                 st.markdown(f"**U{i} Parameters**")
-                vac = st.slider(f"Vacuum", -0.80, -0.96, -0.90, key=f"v{i}")
+                # FIX: Slider range extended to -0.98 to allow better vacuum input
+                vac = st.slider(f"Vacuum", -0.80, -0.98, -0.90, key=f"v{i}") 
                 ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
                 fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
                 spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
@@ -141,7 +151,7 @@ with st.sidebar:
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
                 nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
                 
-                units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, design_params))
+                units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
 
 # Calculate Fleet Totals
 fleet_profit = sum(u['profit'] for u in units_data)
@@ -177,10 +187,11 @@ with tabs[0]:
             </div>
             """, unsafe_allow_html=True)
             
-            if u['sox'] > 600 or u['nox'] > 450:
-                st.error("⚠️ Emission Breach")
+            # Mini Compliance Status
+            if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
+                st.error(f"⚠️ Emission Breach (Limit: {u['limits']['sox']}/{u['limits']['nox']})")
             else:
-                st.success("✅ Emissions OK")
+                st.success("✅ Emissions Compliant")
 
 # --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
 def render_unit_detail(u):
@@ -191,12 +202,14 @@ def render_unit_detail(u):
     
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
+        # Dynamic Target in Gauge
+        target = configs[int(u['id'])-1]['target_hr']
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta", value = u['hr'],
-            delta = {'reference': design_params['target_hr'], 'increasing': {'color': "red"}},
+            delta = {'reference': target, 'increasing': {'color': "red"}},
             gauge = {
                 'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
-                'steps': [{'range': [2000, design_params['target_hr']], 'color': "rgba(0,255,0,0.2)"}, {'range': [design_params['target_hr'], 2600], 'color': "rgba(255,0,0,0.2)"}],
+                'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
                 'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
         ))
@@ -225,10 +238,15 @@ def render_unit_detail(u):
         </div>
         """, unsafe_allow_html=True)
         
-        if u['sox'] > 600:
-            st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid red;">⚠️ SOx High: {u["sox"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid green;">✅ SOx Normal: {u["sox"]}</div>', unsafe_allow_html=True)
+        # SOx/NOx Alert Visuals
+        sox_col = "placard-green" if u['sox'] <= u['limits']['sox'] else "placard-red"
+        st.markdown(f"""
+        <div class="placard {sox_col}" style="padding:10px;">
+            <div class="p-title">Emission Risk</div>
+            <div class="p-val" style="font-size:18px;">SOx: {u['sox']} / NOx: {u['nox']}</div>
+            <div class="p-sub">{'✅ Safe Level' if u['sox'] <= u['limits']['sox'] else '⚠️ ACID RAIN RISK'}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.divider()
     
@@ -250,10 +268,8 @@ def render_unit_detail(u):
         
         # Carbon Credit Card
         val_carb = u['carbon']
-        # LOGIC FIX: If Carbon is negative (excess emissions), title changes
         carb_title = "CO2 Avoided (Credits)" if val_carb > 0 else "Excess CO2 (Penalty)"
         carb_color = "#00ccff" if val_carb > 0 else "#ff3333"
-        
         st.markdown(f"""
         <div class="placard" style="border-left: 5px solid {carb_color};">
             <div class="p-title">{carb_title}</div>
@@ -281,10 +297,33 @@ with tabs[3]: render_unit_detail(units_data[2])
 
 # --- TAB 5: INFO ---
 with tabs[4]:
-    st.markdown("### 📚 Reference & Logic")
+    st.markdown("### 📚 Calculation Breakdown")
     
-    st.info("Formulas used align with BEE PAT Cycle notifications.")
-    st.table(pd.DataFrame({
-        "Metric": ["PAT ESCert", "Carbon Credit", "Tree Equivalent", "Acres Required"],
-        "Formula": ["(Target - Actual) * Gen / 10^7", "Coal Saved (Tons) * 1.7", "Excess CO2 / 0.025 Tons", "Trees / 500"]
-    }))
+    info_c1, info_c2 = st.columns(2)
+    
+    with info_c1:
+        st.markdown("#### 📜 PAT Scheme Calculation")
+        st.markdown("""
+        <div class="glass-card">
+            <h3 style="color:#ffcc00">PAT ESCerts</h3>
+            <p><b>Formula:</b> <code>(Target HR - Actual HR) × Gen (MU) × 10⁶ / 10⁷</code></p>
+            <p>1 ESCert = 1 MTOE (Metric Tonne Oil Equivalent)</p>
+            <p>1 MTOE = 10 Million kcal Heat Energy</p>
+            <hr style="border-color:#444">
+            <p style="font-size:12px; color:#aaa">Example: If you save 10 kcal/kWh on 12 MU gen, you save 120 Million kcal = <b>12 ESCerts</b>.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with info_c2:
+        st.markdown("#### 🌍 Carbon Credit Calculation")
+        st.markdown("""
+        <div class="glass-card">
+            <h3 style="color:#00ccff">Carbon Credits (CCTS)</h3>
+            <p><b>Formula:</b> <code>Coal Saved (Tons) × 1.7</code></p>
+            <p><b>Step 1:</b> Calculate Heat Saved (kcal).</p>
+            <p><b>Step 2:</b> Convert to Coal (Heat / GCV).</p>
+            <p><b>Step 3:</b> Multiply by Emission Factor (1.7 Tons CO2/Ton Coal).</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
