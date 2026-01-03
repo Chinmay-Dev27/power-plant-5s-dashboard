@@ -121,6 +121,7 @@ u6 = calculate_single_unit("6", 12.0, u6_hr, {'vac': -0.88, 'ms': 530})
 u7 = calculate_single_unit("7", 11.8, u7_hr, {'vac': -0.92, 'ms': 538})
 u8 = calculate_single_unit("8", 12.2, u8_hr, {'vac': -0.93, 'ms': 540})
 units = [u6, u7, u8]
+# FIXED VARIABLE NAME HERE
 fleet_profit = sum(u['profit'] for u in units)
 
 # --- 6. MAIN TABS ---
@@ -134,7 +135,8 @@ with t_main:
     
     # Top Summary
     c1, c2, c3 = st.columns(3)
-    c1.metric("Fleet Net Profit (Daily)", f"₹ {fleet_total:,.0f}", delta_color="normal")
+    # FIXED METRIC CALL
+    c1.metric("Fleet Net Profit (Daily)", f"₹ {fleet_profit:,.0f}", delta_color="normal")
     c2.metric("Total Carbon Avoided", f"{sum(u['carbon'] for u in units):,.1f} Tons", "vs Baseline")
     c3.metric("Fleet Avg Heat Rate", f"{int((u6_hr+u7_hr+u8_hr)/3)} kcal/kWh")
     
@@ -240,7 +242,7 @@ with t_learn:
 
     with c2:
         st.markdown("### 🧹 5S in Thermal Plants")
-        
+        st.markdown("The 5S framework organizes the workplace for efficiency and effectiveness:")
         st.markdown("""
         1.  **Sort (Seiri):** Remove scrap metal from boiler floors.
         2.  **Set in Order (Seiton):** Label all valves and drains clearly.
