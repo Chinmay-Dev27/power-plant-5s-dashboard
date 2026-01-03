@@ -31,6 +31,7 @@ def load_lottieurl(url):
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
+anim_bricks = load_lottieurl("https://lottie.host/9f5b6b6e-6b1e-4b1e-9b1e-6b1e6b1e6b1e/placeholder.json") # Placeholder
 
 st.markdown("""
     <style>
@@ -113,7 +114,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v13.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v15.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -123,16 +124,16 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v13.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v13.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v15.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v15.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
 # --- 4. CALCULATION ENGINE ---
-def calculate_unit(u_id, gen, hr, inputs, design_vals):
+def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     # Unpack Design Values Specific to Unit
     TARGET_HR = design_vals['target_hr']
-    DESIGN_HR = 2250 # Fixed Design
+    DESIGN_HR = 2250 
     COAL_GCV = design_vals['gcv']
     LIMIT_SOX = design_vals['limit_sox']
     LIMIT_NOX = design_vals['limit_nox']
@@ -142,8 +143,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
-    
-    # Money
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
     # Trees & Land Logic
@@ -157,14 +156,25 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
     theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 
     l_unacc = max(0, hr - theo_hr - abs(l_vac))
-    
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
-    # Emissions Compliance Additions
-    carbon_intensity = (carbon_tons / gen) if gen > 0 else 0  # CO2/MWh
-    specific_sox = inputs['sox'] / gen if gen > 0 else 0  # SOx/MWh
-    specific_nox = inputs['nox'] / gen if gen > 0 else 0  # NOx/MWh
+    # Emissions Compliance
+    carbon_intensity = (carbon_tons / gen) if gen > 0 else 0
+    specific_sox = inputs['sox'] / gen if gen > 0 else 0
+    specific_nox = inputs['nox'] / gen if gen > 0 else 0
+    
+    # ASH CALCULATIONS
+    # Coal Consumed (Tons) = Gen (MU) * HR (kcal/kWh) * 1000 / GCV
+    coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
+    ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
+    ash_util = ash_params['util_tons']
+    ash_stocked = ash_gen - ash_util
+    
+    # Brick Calc (Approx 1.5kg ash per brick -> 1 Ton = 666 Bricks)
+    bricks_current = ash_util * 666
+    bricks_potential_total = ash_gen * 666 # If 100% util
+    bricks_zero = 0 # If 0% util
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
@@ -173,22 +183,23 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals):
         "score": score_5s, "sox": inputs['sox'], "nox": inputs['nox'],
         "limits": {'sox': LIMIT_SOX, 'nox': LIMIT_NOX},
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
-        "emissions": {"carbon_intensity": carbon_intensity, "specific_sox": specific_sox, "specific_nox": specific_nox}
+        "emissions": {"carbon_intensity": carbon_intensity, "specific_sox": specific_sox, "specific_nox": specific_nox},
+        "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
+                "bricks_made": bricks_current, "bricks_potential": bricks_potential_total}
     }
 
 # --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
-    components.html('<div class="pulse-icon">⚡</div>', height=50)  # Pulsing icon
+    components.html('<div class="pulse-icon">⚡</div>', height=50)
     st.title("Control Panel")
     
-    tab_input, tab_config = st.tabs(["📝 Daily Data", "⚙️ Config"])
+    tab_input, tab_ash, tab_config = st.tabs(["📝 Daily", "🪨 Ash/Coal", "⚙️ Config"])
     
-    # --- TAB: CONFIG (Limits & Refs) ---
+    # --- TAB: CONFIG ---
     with tab_config:
         st.markdown("### 🌍 Emission Limits")
         lim_sox = st.number_input("SOx Limit", value=600)
         lim_nox = st.number_input("NOx Limit", value=450)
-        
         st.markdown("### 🎯 Unit Targets")
         t_u1 = st.number_input("U1 Target HR", value=2300)
         g_u1 = st.number_input("U1 GCV", value=3600)
@@ -199,6 +210,22 @@ with st.sidebar:
         t_u3 = st.number_input("U3 Target HR", value=2295)
         g_u3 = st.number_input("U3 GCV", value=3620)
 
+    # --- TAB: ASH/COAL PARAMETERS ---
+    with tab_ash:
+        st.markdown("### 🧪 Coal Analysis (Common)")
+        coal_ash = st.number_input("Ash Content (%)", 0.0, 60.0, 35.0)
+        coal_moist = st.number_input("Moisture (%)", 0.0, 50.0, 12.0)
+        coal_fc = st.number_input("Fixed Carbon (%)", 0.0, 100.0, 30.0)
+        
+        st.markdown("### 🚜 Ash Management")
+        pond_cap = st.number_input("Total Pond Capacity (Tons)", value=500000)
+        pond_curr = st.number_input("Current Pond Stock (Tons)", value=350000)
+        
+        st.markdown("### 🏗️ Utilization (Tons/Day)")
+        u1_ash_ut = st.number_input("U1 Ash Utilized", value=1500.0)
+        u2_ash_ut = st.number_input("U2 Ash Utilized", value=1400.0)
+        u3_ash_ut = st.number_input("U3 Ash Utilized", value=1600.0)
+
     # --- TAB: DAILY INPUTS ---
     with tab_input:
         date_in = st.date_input("Log Date", datetime.now())
@@ -208,6 +235,7 @@ with st.sidebar:
             {'target_hr': t_u2, 'gcv': g_u2, 'limit_sox': lim_sox, 'limit_nox': lim_nox},
             {'target_hr': t_u3, 'gcv': g_u3, 'limit_sox': lim_sox, 'limit_nox': lim_nox}
         ]
+        ash_utils = [u1_ash_ut, u2_ash_ut, u3_ash_ut]
         
         for i in range(1, 4):
             with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
@@ -216,7 +244,6 @@ with st.sidebar:
                 
                 st.markdown(f"**U{i} Parameters**")
                 vac = st.number_input(f"Vacuum (kg/cm2)", value=-0.90, step=0.001, format="%.3f", key=f"v{i}")
-                # Progress bar for vacuum
                 vac_progress = max(0, min(100, (vac + 0.92) / 0.01 * 100))
                 st.markdown(f'<div class="progress"><div class="progress-fill" style="width: {vac_progress}%"></div></div>', unsafe_allow_html=True)
                 
@@ -226,7 +253,6 @@ with st.sidebar:
                 
                 st.markdown(f"**U{i} Emissions**")
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-                # Conditional border for SOx
                 sox_border = "2px solid #ff3333" if sox > lim_sox else "2px solid #00ff88"
                 st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
                 
@@ -234,7 +260,8 @@ with st.sidebar:
                 nox_border = "2px solid #ff3333" if nox > lim_nox else "2px solid #00ff88"
                 st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
                 
-                units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
+                ash_p = {'ash_pct': coal_ash, 'util_tons': ash_utils[i-1]}
+                units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
         
         # SAVE BUTTON
         st.markdown("---")
@@ -257,13 +284,20 @@ with st.sidebar:
 
 # Calculate Fleet Totals
 fleet_profit = sum(u['profit'] for u in units_data)
+fleet_ash_gen = sum(u['ash']['generated'] for u in units_data)
+fleet_ash_util = sum(u['ash']['utilized'] for u in units_data)
+fleet_ash_stock = fleet_ash_gen - fleet_ash_util
+
+# Ash Pond Life Calculation
+daily_dump = max(1, fleet_ash_stock) # Avoid div by zero
+pond_days_left = (pond_cap - pond_curr) / daily_dump if daily_dump > 0 else 9999
 
 # --- 6. MAIN PAGE LAYOUT ---
 st.title("🏭 GMR Kamalanga 5S Dashboard")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
 
 # TABS NAVIGATION
-tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "📚 Info", "📈 Trends", "🎮 Simulator", "🌿 Compliance & Carbon"])
+tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "🪨 Ash Mgmt", "📚 Info", "📈 Trends", "🎮 Simulator", "🌿 Compliance"])
 
 # --- TAB 1: WAR ROOM (Executive View) ---
 with tabs[0]:
@@ -274,12 +308,12 @@ with tabs[0]:
     if fleet_profit < 0:
         st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid red;">⚠️ Fleet Alert: Optimize Vacuum in U2 for ₹45k savings</div>', unsafe_allow_html=True)
     
-    cols = st.columns(3)
+    cols = st.columns(4) # Changed to 4 columns to include Ash Pond Life
+    
+    # UNIT CARDS
     for i, u in enumerate(units_data):
         color = "#00ff88" if u['profit'] > 0 else "#ff3333"
         border = "border-good" if u['profit'] > 0 else "border-bad"
-        
-        # SOx/NOx Status Colors
         sox_col = "#ff3333" if u['sox'] > u['limits']['sox'] else "#00ff88"
         nox_col = "#ff3333" if u['nox'] > u['limits']['nox'] else "#00ff88"
         
@@ -300,6 +334,22 @@ with tabs[0]:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+    # ASH POND LIFE CARD (New 4th Column)
+    with cols[3]:
+        pond_color = "#00ff88" if pond_days_left > 30 else "#ff3333"
+        st.markdown(f"""
+        <div class="glass-card" style="border-top: 4px solid {pond_color};">
+            <div class="unit-header">ASH POND</div>
+            <div class="big-money" style="color:{pond_color}">{pond_days_left:.0f} Days</div>
+            <div class="p-sub">Capacity Remaining</div>
+            <hr style="border-color:#333; margin:15px 0;">
+            <div style="font-size:13px; color:#ddd;">
+                Generation: <b>{fleet_ash_gen:.0f} T</b><br>
+                Utilized: <b>{fleet_ash_util:.0f} T</b>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
 def render_unit_detail(u, configs):
@@ -395,8 +445,84 @@ with tabs[1]: render_unit_detail(units_data[0], configs)
 with tabs[2]: render_unit_detail(units_data[1], configs)
 with tabs[3]: render_unit_detail(units_data[2], configs)
 
-# --- TAB 5: INFO ---
+# --- NEW TAB 4: ASH MANAGEMENT ---
 with tabs[4]:
+    st.markdown("### 🪨 Ash & By-Product Management")
+    st.divider()
+    
+    # Summary Row
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        st.metric("Total Ash Generated", f"{fleet_ash_gen:,.0f} Tons", delta=f"{fleet_ash_gen*0.01:.0f}% of Coal")
+    with a2:
+        util_pct = (fleet_ash_util / fleet_ash_gen * 100) if fleet_ash_gen > 0 else 0
+        st.metric("Total Ash Utilized", f"{fleet_ash_util:,.0f} Tons", delta=f"{util_pct:.1f}% Efficiency")
+    with a3:
+        st.metric("Net Pond Accumulation", f"{fleet_ash_stock:,.0f} Tons", delta_color="inverse", delta=f"Daily Addn")
+        
+    st.divider()
+    
+    # Brick Simulation & Pond Life
+    ash1, ash2 = st.columns([1, 1])
+    
+    with ash1:
+        st.markdown("#### 🧱 Brick Manufacturing Potential")
+        # Fleet total bricks
+        total_bricks = sum(u['ash']['bricks_made'] for u in units_data)
+        zero_bricks = 0 # Baseline
+        
+        st.info(f"**Current Utilization:** Enough to make **{total_bricks:,.0f} Bricks** today.")
+        st.caption("Calculation: ~1.5kg Ash per Fly Ash Brick")
+        
+        # Comparison Chart
+        df_ash = pd.DataFrame({
+            "Scenario": ["Zero Utilization", "Current Actual", "100% Target"],
+            "Bricks": [0, total_bricks, sum(u['ash']['bricks_potential'] for u in units_data)]
+        })
+        fig_ash = px.bar(df_ash, x="Scenario", y="Bricks", color="Scenario", template="plotly_dark")
+        fig_ash.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_ash, width="stretch")
+
+    with ash2:
+        st.markdown("#### 🌊 Ash Pond Survival")
+        
+        # Gauge for Pond Life
+        fig_pond = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = pond_days_left,
+            title = {'text': "Days to Overflow"},
+            gauge = {
+                'axis': {'range': [0, 3650]}, # 10 years max on gauge
+                'bar': {'color': "#00ff88" if pond_days_left > 365 else "#ff3333"},
+                'steps': [
+                    {'range': [0, 180], 'color': "rgba(255,0,0,0.3)"},
+                    {'range': [180, 3650], 'color': "rgba(0,255,0,0.1)"}
+                ]
+            }
+        ))
+        fig_pond.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        st.plotly_chart(fig_pond, width="stretch")
+        
+        if pond_days_left < 100:
+            st.error(f"CRITICAL: Ash Pond will likely fill up in {pond_days_left:.0f} days at current rate!")
+        else:
+            st.success(f"Safe: Pond has {pond_days_left/365:.1f} years of life remaining.")
+
+    # Unit-wise Ash Table
+    st.markdown("#### Unit-wise Ash Breakdown")
+    ash_table = []
+    for u in units_data:
+        ash_table.append({
+            "Unit": f"Unit {u['id']}",
+            "Coal Consumed (T)": f"{(u['ash']['generated']/(coal_ash/100)):,.0f}",
+            "Ash Generated (T)": f"{u['ash']['generated']:,.0f}",
+            "Ash Utilized (T)": f"{u['ash']['utilized']:,.0f}",
+            "Utilization %": f"{(u['ash']['utilized']/u['ash']['generated']*100 if u['ash']['generated']>0 else 0):.1f}%"
+        })
+    st.dataframe(pd.DataFrame(ash_table), use_container_width=True)
+
+# --- TAB 6: INFO ---
+with tabs[5]:
     st.markdown("### 📚 Calculation Breakdown")
     info_c1, info_c2 = st.columns(2)
     
@@ -421,8 +547,8 @@ with tabs[4]:
     
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
 
-# --- TAB 6: TRENDS (UPDATED) ---
-with tabs[5]:
+# --- TAB 7: TRENDS (UPDATED) ---
+with tabs[6]:
     st.markdown("### 📈 Historical Performance")
     
     # Filter Selection
@@ -459,8 +585,8 @@ with tabs[5]:
     else:
         st.warning("GitHub not connected.")
 
-# --- TAB 7: SIMULATOR ---
-with tabs[6]:
+# --- TAB 8: SIMULATOR ---
+with tabs[7]:
     st.markdown("### 🎮 What-If Simulator")
     if anim_money: st_lottie(anim_money, height=150)
     
@@ -474,15 +600,15 @@ with tabs[6]:
     with c_sim2:
         # Simulate calculation
         sim_inputs = {'vac': s_vac, 'ms': s_ms, 'fg': s_fg, 'spray': s_spray, 'sox': 550, 'nox': 400}
-        sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0])  # Approx
+        sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0], {'ash_pct': 35, 'util_tons': 1000})  # Approx
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Current Profit", f"₹ {units_data[0]['profit']:,.0f}")
         with col2:
             st.metric("Simulated Profit", f"₹ {sim_unit['profit']:,.0f}", delta=f"{sim_unit['profit'] - units_data[0]['profit']:,.0f}")
 
-# --- NEW TAB 8: COMPLIANCE & CARBON ---
-with tabs[7]:
+# --- TAB 9: COMPLIANCE ---
+with tabs[8]:
     st.markdown("### 🌿 Emissions Compliance & Carbon Accounting")
     st.divider()
     
@@ -521,36 +647,3 @@ with tabs[7]:
         {"Item": "Net Balance", "Value": "Towards Net-Zero", "Status": "🟢 Positive" if fleet_carbon < 0 else "🔴 Negative"}
     ])
     st.dataframe(ledger_df, use_container_width=True)
-    
-    # Historical Compliance (from GitHub)
-    repo = init_github()
-    if repo:
-        df_hist, _ = load_history(repo)
-        if not df_hist.empty:
-            df_hist['Year'] = df_hist['Date'].dt.year
-            current_year = datetime.now().year
-            yearly_emissions = df_hist[df_hist['Year'] == current_year].groupby('Unit').agg({
-                'SOx': 'sum', 'NOx': 'sum', 'Gen': 'sum'
-            }).reset_index()
-            if not yearly_emissions.empty:
-                yearly_emissions['Avg SOx/MWh'] = yearly_emissions['SOx'] / yearly_emissions['Gen']
-                yearly_emissions['Avg NOx/MWh'] = yearly_emissions['NOx'] / yearly_emissions['Gen']
-                
-                st.markdown("#### 📈 Yearly Compliance Trends")
-                fig_comp = px.bar(yearly_emissions, x='Unit', y=['Avg SOx/MWh', 'Avg NOx/MWh'], 
-                                  barmode='group', template='plotly_dark', title="Annual Specific Emissions")
-                fig_comp.add_hline(y=lim_sox, line_dash="dash", line_color="red", annotation_text="SOx Limit")
-                fig_comp.add_hline(y=lim_nox, line_dash="dash", line_color="orange", annotation_text="NOx Limit")
-                fig_comp.update_layout(font_color='white', height=400)
-                st.plotly_chart(fig_comp, use_container_width=True)
-                
-                # Export Report Button
-                if st.button("📄 Export Compliance Report"):
-                    csv = yearly_emissions.to_csv(index=False)
-                    st.download_button("Download CSV", csv, "compliance_report.csv", "text/csv")
-            else:
-                st.warning("No data for current year.")
-        else:
-            st.info("No history saved yet.")
-    else:
-        st.warning("GitHub not connected for historical compliance data.")
