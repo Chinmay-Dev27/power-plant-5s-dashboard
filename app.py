@@ -5,12 +5,14 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import requests
+from io import StringIO
+from github import Github, Auth
 from streamlit_lottie import st_lottie
 
-# --- 1. PAGE CONFIGURATION ---
-st.set_page_config(page_title="GMR Kamalanga 5S Command", layout="wide", page_icon="⚡")
+# --- 1. CONFIGURATION & CSS ---
+st.set_page_config(page_title="GMR Kamalanga 5S War Room", layout="wide", page_icon="⚡")
 
-# --- 2. ASSETS & ANIMATIONS ---
+# --- 2. ASSETS ---
 def load_lottieurl(url):
     try:
         r = requests.get(url, timeout=2)
@@ -21,7 +23,6 @@ anim_tree_happy = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 
-# --- 3. CSS STYLING (The "War Room" Look) ---
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; }
@@ -35,276 +36,263 @@ st.markdown("""
         text-align: center;
         transition: transform 0.2s;
     }
-    .unit-card:hover { transform: scale(1.02); }
-    
-    /* SCENE BORDERS */
     .scene-good { border-top: 5px solid #00ff88; }
     .scene-bad { border-top: 5px solid #ff3333; }
-    .scene-warn { border-top: 5px solid #ffb000; }
     
-    /* METRICS */
-    .big-money { font-size: 28px; font-weight: 700; color: white; }
-    .delta-pos { color: #00ff88; font-size: 14px; }
-    .delta-neg { color: #ff3333; font-size: 14px; }
-    
-    /* EXPLANATION BOXES */
-    .fact-box {
-        background: #1c2128; border-left: 4px solid #00aaff;
-        padding: 10px; margin-bottom: 10px; border-radius: 4px;
-        font-size: 14px;
+    /* PLACARDS (Visual Cards) */
+    .placard {
+        background: #1c2128;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border-left: 5px solid #444;
     }
+    .placard-red { border-left: 5px solid #ff3333; }
+    .placard-green { border-left: 5px solid #00ff88; }
+    .placard-orange { border-left: 5px solid #ffb000; }
+    
+    .placard-title { font-size: 12px; color: #aaa; text-transform: uppercase; }
+    .placard-val { font-size: 24px; font-weight: bold; color: white; }
+    .placard-sub { font-size: 12px; color: #888; }
+    
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CALCULATION ENGINE ---
-def calculate_unit(u_id, gen, hr, hr_yest, inputs):
-    # GMR Kamalanga 350MW Design Defaults
-    DESIGN_HR = 2250 
-    TARGET_HR = 2300 # PAT Target
-    COAL_GCV = 3600
+# --- 3. GITHUB ENGINE ---
+def init_github():
+    try:
+        if "GITHUB_TOKEN" in st.secrets:
+            auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
+            g = Github(auth=auth)
+            return g.get_repo(st.secrets["REPO_NAME"])
+    except: return None
+
+def load_history(repo):
+    if not repo: return pd.DataFrame()
+    try:
+        file = repo.get_contents("plant_history.csv", ref=st.secrets["BRANCH"])
+        df = pd.read_csv(StringIO(file.decoded_content.decode()))
+        df['Date'] = pd.to_datetime(df['Date'])
+        return df, file.sha
+    except: return pd.DataFrame(columns=["Date", "Unit", "Profit", "HR", "Score5S"]), None
+
+def save_history(repo, df, sha):
+    try:
+        csv_content = df.to_csv(index=False)
+        msg = "Daily Update" if sha else "Init"
+        if sha: repo.update_file("plant_history.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        return True
+    except: return False
+
+# --- 4. CALCULATION LOGIC ---
+def calc_unit(u_id, gen, hr, inputs):
+    # Constants
+    TARGET_HR = 2300; DESIGN_HR = 2250; COAL_GCV = 3600
     
-    # 1. Financials (Daily)
-    # Energy Saved = (Target - Actual) * Gen * 10^6
+    # A. Financials
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
-    
-    # PAT ESCerts: 1 ESCert = 10 Million kcal
     escerts = kcal_diff / 10_000_000
-    
-    # Carbon: Coal Saved = kcal_diff / GCV
     coal_saved_kg = kcal_diff / COAL_GCV
-    carbon_credits = (coal_saved_kg / 1000) * 1.7 # 1.7 tCO2/tCoal
+    carbon = (coal_saved_kg / 1000) * 1.7
     
-    # Trees: 1 Mature Tree = 25kg CO2/year
-    trees_equiv = abs(carbon_credits * 1000 / 25)
+    # Money
+    profit = (escerts * 1000) + (carbon * 500) + (coal_saved_kg * 4.5)
     
-    # Money (Approx Prices)
-    profit = (escerts * 1000) + (carbon_credits * 500) + (coal_saved_kg * 4.5)
+    # B. Trees (1 Tree = 25kg CO2/yr)
+    trees = abs(carbon * 1000 / 25)
     
-    # 2. Comparison (Yesterday)
-    hr_delta = hr - hr_yest # Positive means HR increased (Bad)
+    # C. 5S Score (5 Parameters)
+    # 1. Vacuum (-0.92 Ref)
+    l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
+    # 2. MS Temp (540 Ref)
+    l_ms = max(0, (540 - inputs['ms']) * 1.2)
+    # 3. FG Temp (130 Ref)
+    l_fg = max(0, (inputs['fg'] - 130) * 1.5)
+    # 4. Spray (15 TPH Ref)
+    l_spray = max(0, (inputs['spray'] - 15) * 2.0)
+    # 5. Unaccounted (Calculated)
+    theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 # 50 is constant
+    l_unacc = max(0, hr - theo_hr - abs(l_vac)) # Approx logic
     
-    # 3. Technical Losses (For 5S Score)
-    loss_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 15) * -1 # deviation from -0.92
-    loss_ms = max(0, (540 - inputs['ms']) * 1.0)
-    loss_fg = max(0, (inputs['fg'] - 130) * 1.0)
-    loss_unaccounted = max(0, hr - (DESIGN_HR + loss_ms + loss_fg + 10))
-    
-    score_5s = max(0, 100 - ((loss_vac + loss_ms + loss_fg + loss_unaccounted)/2))
+    # Score Formula
+    total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
+    score_5s = max(0, 100 - (total_pen / 3.5))
     
     return {
-        "id": u_id, "profit": profit, "hr": hr, "hr_delta": hr_delta,
-        "escerts": escerts, "carbon": carbon_credits, "trees": trees_equiv,
-        "score_5s": score_5s,
-        "losses": {"Vacuum": loss_vac, "MS Temp": loss_ms, "Flue Gas": loss_fg, "Unaccounted": loss_unaccounted}
+        "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
+        "escerts": escerts, "carbon": carbon, "trees": trees, "score": score_5s,
+        "sox": inputs['sox'], "nox": inputs['nox'],
+        "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Isolation": l_unacc}
     }
 
-# --- 5. SIDEBAR INPUTS (FIXED) ---
+# --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
-    st.header("⚙️ GMR Control Panel")
+    st.title("🎛️ Control Panel")
+    date_in = st.date_input("Date", datetime.now())
     
-    # FIX: Correct Unpacking of Tabs
-    tab_today, tab_yest, tab_config = st.tabs(["📝 Today", "⏮️ Yesterday", "🔧 Config"])
-    
-    with tab_today:
-        st.markdown("### Unit 1 (350 MW)")
-        u1_gen = st.number_input("U1 Gen (MU)", 0.0, 12.0, 8.4)
-        u1_hr = st.number_input("U1 HR (kcal)", 2000, 3000, 2380)
-        u1_vac = st.slider("U1 Vac", -0.80, -0.95, -0.90)
-        
-        st.markdown("---")
-        st.markdown("### Unit 2 (350 MW)")
-        u2_gen = st.number_input("U2 Gen (MU)", 0.0, 12.0, 8.2)
-        u2_hr = st.number_input("U2 HR (kcal)", 2000, 3000, 2310)
-        u2_vac = st.slider("U2 Vac", -0.80, -0.95, -0.92)
+    # Inputs for 3 Units
+    units_input = []
+    for i in range(1, 4):
+        with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
+            gen = st.number_input(f"U{i} Gen (MU)", 0.0, 10.0, 8.4, key=f"g{i}")
+            hr = st.number_input(f"U{i} HR (kcal)", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
+            
+            st.markdown(f"**U{i} 5S Parameters**")
+            vac = st.slider(f"Vacuum", -0.80, -0.96, -0.90, key=f"v{i}")
+            ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
+            fg = st.number_input(f"FG Temp", 100, 160, 135, key=f"f{i}")
+            spray = st.number_input(f"Spray (TPH)", 0, 100, 20, key=f"s{i}")
+            
+            st.markdown(f"**U{i} Emissions**")
+            sox = st.number_input(f"SOx (mg/Nm3)", 0, 1000, 550, key=f"sx{i}")
+            nox = st.number_input(f"NOx (mg/Nm3)", 0, 1000, 400, key=f"nx{i}")
+            
+            units_input.append(calc_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}))
 
-        st.markdown("---")
-        st.markdown("### Unit 3 (350 MW)")
-        u3_gen = st.number_input("U3 Gen (MU)", 0.0, 12.0, 8.5)
-        u3_hr = st.number_input("U3 HR (kcal)", 2000, 3000, 2290)
-        u3_vac = st.slider("U3 Vac", -0.80, -0.95, -0.93)
+# Process Fleet Data
+fleet_profit = sum(u['profit'] for u in units_input)
+worst_unit = min(units_input, key=lambda x: x['profit'])
 
-    with tab_yest:
-        st.caption("Used to calculate daily gain/loss trends")
-        u1_hr_y = st.number_input("U1 Yest HR", 2370)
-        u2_hr_y = st.number_input("U2 Yest HR", 2320)
-        u3_hr_y = st.number_input("U3 Yest HR", 2300)
+# --- 6. MAIN DASHBOARD ---
 
-    with tab_config:
-        st.text_input("Plant Name", "GMR Kamalanga")
-        target_hr = st.number_input("PAT Target HR", 2300)
-
-# --- 6. DATA PROCESSING ---
-u1 = calculate_unit("1", u1_gen, u1_hr, u1_hr_y, {'vac': u1_vac, 'ms': 535, 'fg': 135})
-u2 = calculate_unit("2", u2_gen, u2_hr, u2_hr_y, {'vac': u2_vac, 'ms': 538, 'fg': 132})
-u3 = calculate_unit("3", u3_gen, u3_hr, u3_hr_y, {'vac': u3_vac, 'ms': 540, 'fg': 130})
-
-units = [u1, u2, u3]
-fleet_profit = sum(u['profit'] for u in units)
-worst_unit = min(units, key=lambda x: x['profit'])
-
-# --- 7. MAIN DASHBOARD ---
-
-# HEADER
-st.title("🏭 GMR Kamalanga 5S Eco-Command")
-st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Total Daily P&L:** ₹ {fleet_profit:,.0f}")
+# TOP BANNER
+st.title("🏭 GMR Kamalanga War Room")
+col_b1, col_b2 = st.columns([3, 1])
+with col_b1:
+    st.markdown(f"**Fleet Net P&L:** :{'green' if fleet_profit>0 else 'red'}[₹ {fleet_profit:,.0f}]")
+with col_b2:
+    if st.button("💾 Save to GitHub"):
+        repo = init_github()
+        if repo:
+            df_curr, sha = load_history(repo)
+            new_rows = []
+            for u in units_input:
+                new_rows.append({"Date": date_in, "Unit": u['id'], "Profit": u['profit'], "HR": u['hr'], "Score5S": u['score']})
+            df_new = pd.DataFrame(new_rows)
+            df_comb = pd.concat([df_curr, df_new], ignore_index=True) if not df_curr.empty else df_new
+            save_history(repo, df_comb, sha)
+            st.success("Saved!")
+        else:
+            st.error("GitHub Secrets Missing")
 
 st.divider()
 
-# SECTION A: THE WAR ROOM (3 Units Summary)
-cols = st.columns(3)
-for i, u in enumerate(units):
-    # Scene Logic
-    if u['profit'] > 0:
-        border = "scene-good"
-        color = "#00ff88"
-        icon = "🟢"
-    else:
-        border = "scene-bad"
-        color = "#ff3333"
-        icon = "🔴"
-        
-    # Delta Logic
-    if u['hr_delta'] < 0: # HR Dropped (Good)
-        delta_str = f"▼ {abs(u['hr_delta'])} kcal (Improved)"
-        d_class = "delta-pos"
-    else:
-        delta_str = f"▲ {abs(u['hr_delta'])} kcal (Degraded)"
-        d_class = "delta-neg"
+# TABS STRUCTURE
+tab_live, tab_deep, tab_trend, tab_sim, tab_info = st.tabs([
+    "🚨 Live Status", "🔍 Deep Dive (Worst Unit)", "📈 History", "🎮 Simulator", "ℹ️ Reference"
+])
 
-    with cols[i]:
+# TAB 1: LIVE STATUS (3 Units)
+with tab_live:
+    cols = st.columns(3)
+    for i, u in enumerate(units_input):
+        color = "#00ff88" if u['profit'] > 0 else "#ff3333"
+        border = "scene-good" if u['profit'] > 0 else "scene-bad"
+        
+        with cols[i]:
+            st.markdown(f"""
+            <div class="unit-card {border}">
+                <h3 style="margin:0; color:#aaa">UNIT - {u['id']}</h3>
+                <h1 style="margin:0; color:{color}">₹ {u['profit']:,.0f}</h1>
+                <p>HR: {u['hr']} | 5S Score: {u['score']:.1f}</p>
+                <div style="font-size:12px; border-top:1px solid #333; margin-top:5px; padding-top:5px;">
+                    SOx: {u['sox']} | NOx: {u['nox']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+# TAB 2: DEEP DIVE (Worst Unit)
+with tab_deep:
+    st.subheader(f"⚠️ Priority Focus: Unit {worst_unit['id']}")
+    
+    c_left, c_mid, c_right = st.columns([1, 1, 1])
+    
+    # LEFT: Visuals
+    with c_left:
+        st.markdown("#### Environmental Impact")
+        if worst_unit['profit'] > 0:
+            if anim_tree_happy: st_lottie(anim_tree_happy, height=200)
+            st.success(f"Equivalent to planting **{worst_unit['trees']:,.0f} Trees**!")
+        else:
+            if anim_smoke: st_lottie(anim_smoke, height=200)
+            st.error(f"Pollution equal to cutting **{worst_unit['trees']:,.0f} Trees**.")
+
+    # MID: Financial & Placards
+    with c_mid:
+        st.markdown("#### Key Indicators (Placards)")
+        
+        # ESCert Money
+        ecert_val = worst_unit['escerts'] * 1000
+        e_col = "placard-green" if ecert_val > 0 else "placard-red"
         st.markdown(f"""
-        <div class="unit-card {border}">
-            <h3 style="margin:0; color:#aaa">UNIT - {u['id']}</h3>
-            <div class="big-money" style="color:{color}">₹ {u['profit']:,.0f}</div>
-            <p style="margin:5px 0 0 0; font-size:14px;">HR: <b>{u['hr']}</b> <span class="{d_class}">({delta_str})</span></p>
-            <p style="font-size:12px; color:#666;">5S Score: {u['score_5s']:.1f}</p>
+        <div class="placard {e_col}">
+            <div class="placard-title">PAT ESCert Value</div>
+            <div class="placard-val">₹ {ecert_val:,.0f}</div>
+            <div class="placard-sub">{worst_unit['escerts']:.2f} Certificates</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Emission Compliance
+        em_stat = "Compliant" if worst_unit['sox'] < 600 else "Non-Compliant"
+        em_col = "placard-green" if worst_unit['sox'] < 600 else "placard-orange"
+        st.markdown(f"""
+        <div class="placard {em_col}">
+            <div class="placard-title">SOx / NOx Status</div>
+            <div class="placard-val">{em_stat}</div>
+            <div class="placard-sub">SOx: {worst_unit['sox']} | NOx: {worst_unit['nox']}</div>
         </div>
         """, unsafe_allow_html=True)
 
-# SECTION B: DEEP DIVE (Worst Unit Focus)
-st.markdown("### ")
-st.subheader(f"⚠️ Priority Focus: Unit {worst_unit['id']} Analysis")
-
-t_impact, t_root = st.columns([1, 1])
-
-with t_impact:
-    st.markdown("#### 🌳 Environmental & Financial Impact")
-    
-    # Emotional Animation (Happy vs Sad)
-    if worst_unit['profit'] > 0:
-        if anim_tree_happy: st_lottie(anim_tree_happy, height=200, key="happy")
-        msg_title = "Excellent Performance!"
-        msg_body = f"Unit {worst_unit['id']} is saving the planet."
-        msg_color = "success"
-    else:
-        if anim_smoke: st_lottie(anim_smoke, height=200, key="sad")
-        msg_title = "Critical Emissions!"
-        msg_body = f"Unit {worst_unit['id']} is bleeding efficiency."
-        msg_color = "error"
+    # RIGHT: 5S Root Cause
+    with c_right:
+        st.markdown("#### 🔧 5S Loss Breakdown")
+        df_loss = pd.DataFrame(list(worst_unit['losses'].items()), columns=['Param', 'Loss'])
+        df_loss = df_loss.sort_values('Loss')
         
-    # Placards (The Calculation Explanations)
-    with st.expander("ℹ️ See Calculation Logic (Placards)", expanded=True):
-        st.markdown(f"""
-        <div class="fact-box">
-            <b>📜 PAT ESCerts:</b> {worst_unit['escerts']:.2f}<br>
-            <i>Logic:</i> (Target - Actual) × Gen / 10 Million kcal
-        </div>
-        <div class="fact-box">
-            <b>🌫️ Carbon Credits:</b> {worst_unit['carbon']:.2f} Tons<br>
-            <i>Logic:</i> Coal Saved × 1.7 (Emission Factor)
-        </div>
-        <div class="fact-box">
-            <b>🌲 Tree Equivalent:</b> {worst_unit['trees']:,.0f} Mature Trees<br>
-            <i>Logic:</i> Excess CO2 / 0.025 Tons (Absorption per tree/year)
-        </div>
-        """, unsafe_allow_html=True)
+        fig = px.bar(df_loss, x='Loss', y='Param', orientation='h', color='Loss', color_continuous_scale='Reds')
+        fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white')
+        st.plotly_chart(fig, use_container_width=True)
 
-with t_root:
-    st.markdown("#### 🔧 Root Cause (Loss Pareto)")
-    
-    # Sort losses for Pareto
-    loss_df = pd.DataFrame(list(worst_unit['losses'].items()), columns=['Param', 'Val'])
-    loss_df = loss_df.sort_values('Val', ascending=True)
-    
-    # Chart
-    fig = px.bar(loss_df, x='Val', y='Param', orientation='h', text='Val',
-                 color='Val', color_continuous_scale=['#444', '#ff3333'])
-    fig.update_layout(
-        template="plotly_dark", 
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        height=300,
-        title="kcal/kWh Loss Breakdown"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Action Plan
-    top_loss = loss_df.iloc[-1]['Param']
-    st.error(f"**ACTION REQUIRED:** High losses in **{top_loss}**. Initiate 5S cleaning/maintenance immediately.")
+# TAB 3: HISTORY
+with tab_trend:
+    repo = init_github()
+    if repo:
+        df_hist, sha = load_history(repo)
+        if not df_hist.empty:
+            st.markdown("### 📊 Fleet Trends")
+            fig_hist = px.line(df_hist, x="Date", y="HR", color="Unit", markers=True, template="plotly_dark")
+            st.plotly_chart(fig_hist, use_container_width=True)
+        else:
+            st.info("No history found. Click 'Save' to start tracking.")
+    else:
+        st.warning("GitHub not connected.")
 
-# SECTION C: THE PLAYGROUND & HISTORY (Tabs)
-st.divider()
-tab1, tab2, tab3 = st.tabs(["📈 History & Trends", "🎮 What-If Simulator", "📚 5S Knowledge"])
-
-with tab1:
-    st.markdown("### 📅 30-Day Performance Trend")
-    # Mock Data Generator
-    dates = pd.date_range(end=datetime.now(), periods=30)
-    mock_data = pd.DataFrame({
-        "Date": dates,
-        "Heat Rate": np.linspace(2400, 2300, 30) + np.random.normal(0, 10, 30),
-        "Profit": np.linspace(-50000, 50000, 30)
-    })
+# TAB 4: SIMULATOR
+with tab_sim:
+    st.markdown("### 🎮 What-If Simulator")
+    s_vac = st.slider("Simulate Vacuum Improvement", -0.85, -0.96, -0.90)
+    s_gen = st.slider("Simulate Load (MW)", 300, 350, 350)
     
+    # Calc
+    base_loss = 20 # approx
+    new_loss = (abs(s_vac) - 0.90) * 100 * 15 
+    savings = abs(new_loss * s_gen * 24 * 4.5)
+    
+    st.metric("Potential Daily Savings", f"₹ {savings:,.0f}")
+    if anim_money: st_lottie(anim_money, height=150)
+
+# TAB 5: REFERENCE
+with tab_info:
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**Station Heat Rate Trend**")
-        fig_hr = px.line(mock_data, x="Date", y="Heat Rate", markers=True, template="plotly_dark")
-        fig_hr.add_hline(y=2300, line_dash="dash", line_color="green", annotation_text="Target")
-        st.plotly_chart(fig_hr, use_container_width=True)
+        st.markdown("### 📜 Design Parameters (GMR)")
+        st.table(pd.DataFrame({
+            "Param": ["Design HR", "Target HR", "Design Vac", "SOx Limit"],
+            "Value": ["2250 kcal", "2300 kcal", "-0.92 kg/cm2", "600 mg/Nm3"]
+        }))
     with c2:
-        st.markdown("**Financial Gain/Loss Trend**")
-        fig_p = px.bar(mock_data, x="Date", y="Profit", color="Profit", 
-                      color_continuous_scale=["red", "green"], template="plotly_dark")
-        st.plotly_chart(fig_p, use_container_width=True)
-
-with tab2:
-    st.markdown("### 🎮 Operator Playground")
-    st.caption("Adjust parameters to see potential savings (Interactive)")
-    
-    col_sim1, col_sim2 = st.columns([1, 2])
-    with col_sim1:
-        sim_vac = st.slider("Improve Vacuum to:", -0.85, -0.96, -0.92)
-        sim_ms = st.slider("Improve MS Temp to:", 525, 545, 540)
-    
-    with col_sim2:
-        # Simple Simulator Logic
-        # Vacuum: 0.01 = 15 kcal | MS Temp: 1 deg = 1 kcal
-        # Base is current Worst Unit
-        current_hr = worst_unit['hr']
-        # Calculate simulated HR
-        # Current Vac/Temp from inputs (simplified for demo)
-        base_vac = -0.90
-        base_ms = 535
-        
-        gain_vac = (abs(sim_vac) - abs(base_vac)) / 0.01 * 15
-        gain_ms = (sim_ms - base_ms) * 1.0
-        
-        sim_hr = current_hr - gain_vac - gain_ms
-        sim_savings = (current_hr - sim_hr) * 8.4 * 1000000 / 3600 * 4.5 # Rs
-        
-        st.metric("Simulated New Heat Rate", f"{sim_hr:.0f} kcal/kWh")
-        st.markdown(f"### Potential Daily Savings: :green[₹ {max(0, sim_savings):,.0f}]")
-        if anim_money: st_lottie(anim_money, height=150, key="sim_money")
-
-with tab3:
-    st.markdown("### 📚 Reference Data (GMR Kamalanga)")
-    [attachment_0](attachment)
-    st.markdown("""
-    * **Capacity:** 3 x 350 MW
-    * **Boiler:** Sub-Critical, Pulverized Coal
-    * **5S Focus Areas:**
-        1.  **Vacuum:** Condenser tube cleaning (Shine).
-        2.  **Combustion:** Mill fineness & burner tilt (Standardize).
-        3.  **Isolation:** Drain passing checks (Sustain).
-    """)
+        st.markdown("### 🌳 Calculation Logic")
+        st.info("1 ESCert = 10 Million kcal Saved")
+        st.info("1 Ton Coal = 1.7 Ton CO2")
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Rankine Cycle")
