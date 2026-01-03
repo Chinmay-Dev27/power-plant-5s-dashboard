@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 from streamlit_lottie import st_lottie
 
@@ -84,7 +84,6 @@ def calculate_unit(u_id, gen, hr, hr_yest, inputs):
     hr_delta = hr - hr_yest # Positive means HR increased (Bad)
     
     # 3. Technical Losses (For 5S Score)
-    # 5S Score = 100 - (Total Penalties / Scaling Factor)
     loss_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 15) * -1 # deviation from -0.92
     loss_ms = max(0, (540 - inputs['ms']) * 1.0)
     loss_fg = max(0, (inputs['fg'] - 130) * 1.0)
@@ -99,42 +98,42 @@ def calculate_unit(u_id, gen, hr, hr_yest, inputs):
         "losses": {"Vacuum": loss_vac, "MS Temp": loss_ms, "Flue Gas": loss_fg, "Unaccounted": loss_unaccounted}
     }
 
-# --- 5. SIDEBAR INPUTS (The Control Panel) ---
+# --- 5. SIDEBAR INPUTS (FIXED) ---
 with st.sidebar:
     st.header("⚙️ GMR Control Panel")
     
-    with st.tabs(["📝 Today", "⏮️ Yesterday", "🔧 Config"]):
+    # FIX: Correct Unpacking of Tabs
+    tab_today, tab_yest, tab_config = st.tabs(["📝 Today", "⏮️ Yesterday", "🔧 Config"])
+    
+    with tab_today:
+        st.markdown("### Unit 1 (350 MW)")
+        u1_gen = st.number_input("U1 Gen (MU)", 0.0, 12.0, 8.4)
+        u1_hr = st.number_input("U1 HR (kcal)", 2000, 3000, 2380)
+        u1_vac = st.slider("U1 Vac", -0.80, -0.95, -0.90)
         
-        with st.tab("📝 Today"):
-            st.markdown("### Unit 1 (350 MW)")
-            u1_gen = st.number_input("U1 Gen (MU)", 0.0, 10.0, 8.4)
-            u1_hr = st.number_input("U1 HR (kcal)", 2000, 3000, 2380)
-            u1_vac = st.slider("U1 Vac", -0.80, -0.95, -0.90)
-            
-            st.markdown("---")
-            st.markdown("### Unit 2 (350 MW)")
-            u2_gen = st.number_input("U2 Gen (MU)", 0.0, 10.0, 8.2)
-            u2_hr = st.number_input("U2 HR (kcal)", 2000, 3000, 2310)
-            u2_vac = st.slider("U2 Vac", -0.80, -0.95, -0.92)
+        st.markdown("---")
+        st.markdown("### Unit 2 (350 MW)")
+        u2_gen = st.number_input("U2 Gen (MU)", 0.0, 12.0, 8.2)
+        u2_hr = st.number_input("U2 HR (kcal)", 2000, 3000, 2310)
+        u2_vac = st.slider("U2 Vac", -0.80, -0.95, -0.92)
 
-            st.markdown("---")
-            st.markdown("### Unit 3 (350 MW)")
-            u3_gen = st.number_input("U3 Gen (MU)", 0.0, 10.0, 8.5)
-            u3_hr = st.number_input("U3 HR (kcal)", 2000, 3000, 2290)
-            u3_vac = st.slider("U3 Vac", -0.80, -0.95, -0.93)
+        st.markdown("---")
+        st.markdown("### Unit 3 (350 MW)")
+        u3_gen = st.number_input("U3 Gen (MU)", 0.0, 12.0, 8.5)
+        u3_hr = st.number_input("U3 HR (kcal)", 2000, 3000, 2290)
+        u3_vac = st.slider("U3 Vac", -0.80, -0.95, -0.93)
 
-        with st.tab("⏮️ Yesterday"):
-            st.caption("Used to calculate daily gain/loss trends")
-            u1_hr_y = st.number_input("U1 Yest HR", 2370)
-            u2_hr_y = st.number_input("U2 Yest HR", 2320)
-            u3_hr_y = st.number_input("U3 Yest HR", 2300)
+    with tab_yest:
+        st.caption("Used to calculate daily gain/loss trends")
+        u1_hr_y = st.number_input("U1 Yest HR", 2370)
+        u2_hr_y = st.number_input("U2 Yest HR", 2320)
+        u3_hr_y = st.number_input("U3 Yest HR", 2300)
 
-        with st.tab("🔧 Config"):
-            st.text_input("Plant Name", "GMR Kamalanga")
-            target_hr = st.number_input("PAT Target HR", 2300)
+    with tab_config:
+        st.text_input("Plant Name", "GMR Kamalanga")
+        target_hr = st.number_input("PAT Target HR", 2300)
 
 # --- 6. DATA PROCESSING ---
-# We use dummy values for temp/fg to simplify the demo, but logic handles them
 u1 = calculate_unit("1", u1_gen, u1_hr, u1_hr_y, {'vac': u1_vac, 'ms': 535, 'fg': 135})
 u2 = calculate_unit("2", u2_gen, u2_hr, u2_hr_y, {'vac': u2_vac, 'ms': 538, 'fg': 132})
 u3 = calculate_unit("3", u3_gen, u3_hr, u3_hr_y, {'vac': u3_vac, 'ms': 540, 'fg': 130})
