@@ -226,13 +226,7 @@ with st.sidebar:
                 
                 st.markdown(f"**U{i} Emissions**")
                 sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-                # Conditional border for SOx
-                sox_border = "2px solid #ff3333" if sox > lim_sox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
-                
                 nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
-                nox_border = "2px solid #ff3333" if nox > lim_nox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
                 
                 units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1]))
         
@@ -486,11 +480,12 @@ with tabs[7]:
     st.markdown("### 🌿 Emissions Compliance & Carbon Accounting")
     st.divider()
     
-    # Fleet Emissions Summary
+    # Fleet Emissions Summary - FIXED SUMS
+    total_gen = sum(u['gen'] for u in units_data)
     fleet_carbon = sum(u['carbon'] for u in units_data)
-    fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
-    fleet_nox = sum(u['nox'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
-    fleet_ci = sum(u['emissions']['carbon_intensity'] * u['gen'] for u in units_data) / sum(u['gen']) if sum(u['gen']) > 0 else 0
+    fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
+    fleet_nox = sum(u['nox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
+    fleet_ci = sum(u['emissions']['carbon_intensity'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -503,6 +498,12 @@ with tabs[7]:
         st.metric(f"Avg NOx/MWh {nox_comp}", f"{fleet_nox:.1f}", delta=f"{fleet_nox - lim_nox:.1f}")
     with col4:
         st.metric("Carbon Intensity (Tons/MWh)", f"{fleet_ci:.2f}")
+    
+    # Fleet Acid Rain Warning
+    if fleet_sox > lim_sox or fleet_nox > lim_nox:
+        st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; border:1px solid red; text-align:center; margin:20px 0;">⚠️ FLEET ACID RAIN RISK<br>High Average SOx/NOx Levels</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:15px; border-radius:8px; border:1px solid green; text-align:center; margin:20px 0;">✅ Fleet Safe Emissions</div>', unsafe_allow_html=True)
     
     st.divider()
     
@@ -525,20 +526,25 @@ with tabs[7]:
             yearly_emissions = df_hist[df_hist['Year'] == current_year].groupby('Unit').agg({
                 'SOx': 'sum', 'NOx': 'sum', 'Gen': 'sum'
             }).reset_index()
-            yearly_emissions['Avg SOx/MWh'] = yearly_emissions['SOx'] / yearly_emissions['Gen']
-            yearly_emissions['Avg NOx/MWh'] = yearly_emissions['NOx'] / yearly_emissions['Gen']
-            
-            st.markdown("#### 📈 Yearly Compliance Trends")
-            fig_comp = px.bar(yearly_emissions, x='Unit', y=['Avg SOx/MWh', 'Avg NOx/MWh'], 
-                              barmode='group', template='plotly_dark', title="Annual Specific Emissions")
-            fig_comp.add_hline(y=lim_sox, line_dash="dash", line_color="red", annotation_text="SOx Limit")
-            fig_comp.add_hline(y=lim_nox, line_dash="dash", line_color="orange", annotation_text="NOx Limit")
-            fig_comp.update_layout(font_color='white', height=400)
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # Export Report Button
-            if st.button("📄 Export Compliance Report"):
-                csv = yearly_emissions.to_csv(index=False)
-                st.download_button("Download CSV", csv, "compliance_report.csv", "text/csv")
+            if not yearly_emissions.empty:
+                yearly_emissions['Avg SOx/MWh'] = yearly_emissions['SOx'] / yearly_emissions['Gen']
+                yearly_emissions['Avg NOx/MWh'] = yearly_emissions['NOx'] / yearly_emissions['Gen']
+                
+                st.markdown("#### 📈 Yearly Compliance Trends")
+                fig_comp = px.bar(yearly_emissions, x='Unit', y=['Avg SOx/MWh', 'Avg NOx/MWh'], 
+                                  barmode='group', template='plotly_dark', title="Annual Specific Emissions")
+                fig_comp.add_hline(y=lim_sox, line_dash="dash", line_color="red", annotation_text="SOx Limit")
+                fig_comp.add_hline(y=lim_nox, line_dash="dash", line_color="orange", annotation_text="NOx Limit")
+                fig_comp.update_layout(font_color='white', height=400)
+                st.plotly_chart(fig_comp, use_container_width=True)
+                
+                # Export Report Button
+                if st.button("📄 Export Compliance Report"):
+                    csv = yearly_emissions.to_csv(index=False)
+                    st.download_button("Download CSV", csv, "compliance_report.csv", "text/csv")
+            else:
+                st.warning("No data for current year.")
+        else:
+            st.info("No history saved yet.")
     else:
         st.warning("GitHub not connected for historical compliance data.")
