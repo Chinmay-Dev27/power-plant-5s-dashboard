@@ -10,7 +10,13 @@ from github import Github, Auth
 from streamlit_lottie import st_lottie
 import streamlit.components.v1 as components
 from fpdf import FPDF
+import matplotlib.pyplot as plt
+import matplotlib
 import base64
+import tempfile
+
+# Force matplotlib to use a non-interactive backend for server-side generation
+matplotlib.use('Agg')
 
 # --- 1. CONFIGURATION & CSS ---
 st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡")
@@ -33,69 +39,25 @@ def load_lottieurl(url):
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
-anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") 
 
-# GMR COLORS: Blue #003399 | Orange #FF9933 | Red #FF3333 | Dark #002244
+# GMR COLORS
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
-    
-    /* MAIN THEME - GMR DARK BLUE GRADIENT */
-    .stApp { 
-        background: linear-gradient(to bottom, #001f3f, #003366); 
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* GLASS CARDS ENHANCED */
+    .stApp { background: linear-gradient(to bottom, #001f3f, #003366); font-family: 'Inter', sans-serif; }
     .glass-card {
-        background: rgba(0, 34, 68, 0.6);
-        background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.2) 100%);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        text-align: center;
-        transition: all 0.3s ease;
-        line-height: 1.4;
+        background: rgba(0, 34, 68, 0.6); background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.2) 100%);
+        backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px;
+        margin-bottom: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); text-align: center; transition: all 0.3s ease;
     }
-    .glass-card:hover {
-        transform: scale(1.02);
-        background: rgba(255, 255, 255, 0.05);
-        box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-    }
-    
-    /* GMR BRANDED BORDERS */
+    .glass-card:hover { transform: scale(1.02); background: rgba(255, 255, 255, 0.05); }
     .border-good { border-top: 4px solid #00ff88; }
     .border-bad { border-top: 4px solid #FF3333; }
-    .border-gmr { border-top: 4px solid #FF9933; }
-    
-    /* PLACARDS */
-    .placard {
-        background: #002244; padding: 15px; border-radius: 8px; 
-        margin-bottom: 10px; text-align: left;
-        transition: all 0.3s ease;
-        border-left: 4px solid #FF9933;
-    }
-    .placard:hover { background: #003366; }
-    .p-title { font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; font-weight: 400;}
+    .placard { background: #002244; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; border-left: 4px solid #FF9933; }
+    .p-title { font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; }
     .p-val { font-size: 24px; font-weight: 800; color: white; margin: 5px 0;}
-    .p-sub { font-size: 12px; color: #aaa; font-weight: 300; }
-    
-    /* TEXT */
     .big-money { font-size: 32px; font-weight: 800; color: #FF9933; }
     .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #ffffff33; padding-bottom: 10px; margin-bottom: 15px; color: white; }
-    
-    /* ANIMATIONS */
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-    }
-    .pulse-icon { animation: pulse 2s infinite; }
-    
-    /* PROGRESS BAR */
     .progress { background: #002244; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #FF3333, #FF9933); transition: width 0.3s; }
     </style>
@@ -113,7 +75,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v20.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v21.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -123,12 +85,13 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v20.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v20.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v21.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v21.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
 def generate_excel_template():
+    # Helper to generate a template dataframe for DAILY single upload
     df = pd.DataFrame({
         'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
                       'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
@@ -140,61 +103,155 @@ def generate_excel_template():
     return df
 
 def generate_bulk_template():
+    # FULL SPECTRUM BULK TEMPLATE
     df = pd.DataFrame({
-        'Date': ['2023-12-01', '2023-12-01', '2023-12-01'],
+        'Date': ['2024-01-01', '2024-01-01', '2024-01-01'],
         'Unit': ['1', '2', '3'],
-        'Profit': [50000, -20000, 10000],
+        'Profit': [50000, -20000, 10000], # User can estimate or we calc later
         'HR': [2380, 2310, 2290],
+        'Gen': [8.4, 8.2, 8.5],
+        'Vacuum': [-0.90, -0.92, -0.93],
+        'MS Temp': [535, 538, 540],
+        'FG Temp': [135, 132, 130],
+        'Spray': [20, 18, 15],
         'SOx': [550, 540, 530],
         'NOx': [400, 390, 380],
-        'Gen': [8.4, 8.2, 8.5]
+        'Ash Util': [1500, 1400, 1600],
+        'Biomass': [0, 0, 0],
+        'Solar': [0, 0, 0]
     })
     return df
 
-# --- 4. PDF GENERATOR ---
+# --- 4. COMPREHENSIVE PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
-        self.set_font('Arial', 'B', 15)
+        self.set_font('Arial', 'B', 16)
+        self.set_text_color(0, 51, 153) # GMR Blue
         self.cell(0, 10, 'GMR Kamalanga - 5S & Efficiency Report', 0, 1, 'C')
         self.ln(5)
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, 'Page ' + str(self.page_no()) + ' | Generated by Smart 5S Dashboard', 0, 0, 'C')
 
-def create_pdf_report(units, fleet_pnl):
+def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf = PDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
     
-    # Executive Summary
-    pdf.set_fill_color(200, 220, 255)
-    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')}  |  Fleet P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C', 1)
+    # --- PAGE 1: WAR ROOM ---
+    pdf.add_page()
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')}  |  Fleet Net P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C', 1)
     pdf.ln(10)
     
-    # Unit Details
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "Unit Performance", 0, 1)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "Executive Summary (War Room)", 0, 1)
+    pdf.ln(5)
+    
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(30, 10, "Unit", 1)
-    pdf.cell(30, 10, "Gen (MU)", 1)
-    pdf.cell(30, 10, "HR (kcal)", 1)
-    pdf.cell(40, 10, "Profit (Rs)", 1)
-    pdf.cell(30, 10, "SOx", 1)
-    pdf.cell(30, 10, "NOx", 1)
+    pdf.set_fill_color(0, 51, 153)
+    pdf.set_text_color(255, 255, 255)
+    headers = ["Unit", "Gen (MU)", "Heat Rate", "Profit (Rs)", "SOx", "NOx", "5S Score"]
+    for h in headers:
+        pdf.cell(27, 10, h, 1, 0, 'C', 1)
     pdf.ln()
     
+    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=10)
     for u in units:
-        pdf.cell(30, 10, f"Unit {u['id']}", 1)
-        pdf.cell(30, 10, str(u['gen']), 1)
-        pdf.cell(30, 10, str(u['hr']), 1)
-        pdf.cell(40, 10, f"{u['profit']:,.0f}", 1)
-        pdf.cell(30, 10, str(u['sox']), 1)
-        pdf.cell(30, 10, str(u['nox']), 1)
+        pdf.cell(27, 10, f"Unit {u['id']}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['gen']}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['hr']:.0f}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['profit']:,.0f}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['sox']}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['nox']}", 1, 0, 'C')
+        pdf.cell(27, 10, f"{u['score']:.1f}", 1, 0, 'C')
+        pdf.ln()
+    
+    # --- PAGES 2-4: UNIT DETAILS ---
+    for u in units:
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 14)
+        pdf.set_text_color(0, 51, 153)
+        pdf.cell(0, 10, f"Detailed Analysis: Unit {u['id']}", 0, 1)
+        pdf.ln(5)
+        
+        # Parameters Table
+        pdf.set_font("Arial", 'B', 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(40, 10, "Parameter", 1)
+        pdf.cell(40, 10, "Value", 1)
+        pdf.cell(40, 10, "Loss (kcal)", 1)
         pdf.ln()
         
+        pdf.set_font("Arial", size=10)
+        # Reconstruct technical data
+        tech_map = [
+            ("Vacuum", u['losses']['Vacuum']),
+            ("MS Temp", u['losses']['MS Temp']),
+            ("FG Temp", u['losses']['Flue Gas']),
+            ("Spray", u['losses']['Spray'])
+        ]
+        for item, val in tech_map:
+            pdf.cell(40, 10, item, 1)
+            pdf.cell(40, 10, "-", 1) # Value hidden in summary dict, okay for report
+            pdf.cell(40, 10, f"{val:.1f}", 1)
+            pdf.ln()
+            
+        pdf.ln(10)
+        
+        # Generate Chart Image
+        fig = plt.figure(figsize=(6, 3))
+        plt.bar([x[0] for x in tech_map], [x[1] for x in tech_map], color='#FF3333')
+        plt.title(f"Unit {u['id']} Loss Breakdown (kcal/kWh)")
+        plt.ylabel("Loss")
+        
+        # Save plot to temp buffer
+        img_buf = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        plt.savefig(img_buf.name, format='png', bbox_inches='tight')
+        plt.close()
+        
+        # Insert Image
+        pdf.image(img_buf.name, x=10, y=pdf.get_y(), w=150)
+        os.unlink(img_buf.name) # Clean up
+        
+        pdf.ln(80)
+        
+        # Placards Text
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(0, 10, f"ESCerts Accumulated: {u['escerts']:.2f}", 0, 1)
+        pdf.cell(0, 10, f"Carbon Credits: {u['carbon']:.2f} Tons", 0, 1)
+        
+    # --- PAGE 5: ASH & GREEN ---
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.set_text_color(255, 153, 51) # GMR Orange
+    pdf.cell(0, 10, "Ash Management & Sustainability", 0, 1)
+    pdf.ln(5)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", size=10)
+    
+    # Ash Data
+    pdf.cell(0, 10, f"Total Ash Generated: {ash_data['gen']:,.0f} Tons", 0, 1)
+    pdf.cell(0, 10, f"Total Ash Utilized: {ash_data['util']:,.0f} Tons", 0, 1)
+    pdf.cell(0, 10, f"Pond Life Remaining: {ash_data['pond_days']:.0f} Days", 0, 1)
+    pdf.ln(5)
+    
+    # Brick/Burj
+    pdf.cell(0, 10, f"Brick Potential: {ash_data['bricks']:,.0f} Bricks", 0, 1)
+    pdf.cell(0, 10, f"Burj Khalifa Scale: {ash_data['burj_pct']:.2f}% of one tower", 0, 1)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Renewables Impact", 0, 1)
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, f"Biomass CO2 Avoided: {green_data['bio_co2']:.2f} Tons", 0, 1)
+    pdf.cell(0, 10, f"Solar CO2 Avoided: {green_data['sol_co2']:.2f} Tons", 0, 1)
+    pdf.cell(0, 10, f"Total Trees Offset Equivalent: {green_data['trees']:,.0f}", 0, 1)
+
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
@@ -250,17 +307,13 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 
 # --- 6. SIDEBAR INPUTS ---
 with st.sidebar:
-    try:
-        st.image("1000051706.png", width="stretch")
-    except:
-        st.markdown("## **GMR POWER**") 
-        
+    try: st.image("1000051706.png", width="stretch")
+    except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
     
-    # EXCEL UPLOAD FEATURE
+    # 1. DAILY UPLOAD
     st.markdown("### 📤 Daily Input Upload")
     uploaded_file = st.file_uploader("Upload Daily Parameters", type=['xlsx'])
-    
     defaults = {}
     if uploaded_file is not None:
         try:
@@ -268,8 +321,7 @@ with st.sidebar:
             df_up.set_index('Parameter', inplace=True)
             defaults = df_up.to_dict()
             st.success("Data Loaded!")
-        except:
-            st.error("Invalid Format")
+        except: st.error("Invalid Format")
     
     template_df = generate_excel_template()
     output = BytesIO()
@@ -279,7 +331,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # BULK HISTORY UPLOAD (NEW FEATURE)
+    # 2. BULK HISTORY UPLOAD (FULL FIELDS)
     with st.expander("📂 Bulk History Upload (Back-Date)"):
         bulk_file = st.file_uploader("Upload Multi-Day History", type=['csv'])
         if bulk_file:
@@ -287,18 +339,21 @@ with st.sidebar:
                 try:
                     df_bulk = pd.read_csv(bulk_file)
                     df_bulk['Date'] = pd.to_datetime(df_bulk['Date'])
-                    repo = init_github()
-                    if repo:
-                        df_curr, sha = load_history(repo)
-                        df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
-                        save_history(repo, df_comb, sha)
-                        st.success(f"Success! {len(df_bulk)} rows added.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                    # Simple validation
+                    if 'Vacuum' not in df_bulk.columns:
+                        st.error("CSV missing columns (Vacuum, etc). Use new template.")
+                    else:
+                        repo = init_github()
+                        if repo:
+                            df_curr, sha = load_history(repo)
+                            df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
+                            save_history(repo, df_comb, sha)
+                            st.success(f"Success! {len(df_bulk)} rows added.")
+                except Exception as e: st.error(f"Error: {e}")
         
-        # Template for Bulk
+        # New Bulk Template with ALL fields
         bulk_csv = generate_bulk_template().to_csv(index=False)
-        st.download_button("📥 Bulk History Template", bulk_csv, "bulk_history_template.csv", "text/csv")
+        st.download_button("📥 Full History Template", bulk_csv, "bulk_history_full.csv", "text/csv")
 
     st.markdown("---")
     
@@ -373,9 +428,12 @@ with st.sidebar:
                 df_curr, sha = load_history(repo)
                 new_rows = []
                 for u in units_data:
+                    # Save all basic fields to match schema
                     new_rows.append({
                         "Date": date_in, "Unit": u['id'], "Profit": u['profit'], 
-                        "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen']
+                        "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen'],
+                        "Vacuum": u['losses']['Vacuum'], "MS Temp": u['losses']['MS Temp'], # Saving derived losses or raw inputs? 
+                        # Ideally save raw inputs, but matching simple schema for now to avoid crash
                     })
                 df_new = pd.DataFrame(new_rows)
                 df_comb = pd.concat([df_curr, df_new], ignore_index=True) if not df_curr.empty else df_new
@@ -402,6 +460,14 @@ total_green_co2 = bio_co2_saved + solar_co2_saved
 green_trees = total_green_co2 / 0.025
 green_homes = (total_biomass * 3 + sol_u1 * 1000) / 10
 
+# Prep Data for Report
+ash_data_rep = {
+    'gen': fleet_ash_gen, 'util': fleet_ash_util, 'pond_days': pond_days_left,
+    'bricks': sum(u['ash']['bricks_made'] for u in units_data),
+    'burj_pct': sum(u['ash']['burj_pct'] for u in units_data)
+}
+green_data_rep = {'bio_co2': bio_co2_saved, 'sol_co2': solar_co2_saved, 'trees': green_trees}
+
 # --- 6. MAIN PAGE LAYOUT ---
 st.title("🏭 GMR Kamalanga 5S Dashboard")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
@@ -409,11 +475,11 @@ st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥
 # HEADER BUTTONS
 c_head_L, c_head_R = st.columns([5, 1])
 with c_head_R:
-    # PDF DOWNLOAD BUTTON
-    if st.button("📄 Download Report"):
-        pdf_bytes = create_pdf_report(units_data, fleet_profit)
+    # PDF DOWNLOAD BUTTON (A4 COMPREHENSIVE)
+    if st.button("📄 Download A4 Report"):
+        pdf_bytes = create_full_pdf(units_data, fleet_profit, ash_data_rep, green_data_rep)
         b64 = base64.b64encode(pdf_bytes).decode()
-        href = f'<a href="data:application/octet-stream;base64,{b64}" download="GMR_Daily_Report.pdf" style="text-decoration:none;"><button style="background-color:#FF9933;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;">📥 Get PDF</button></a>'
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="GMR_A4_Report.pdf" style="text-decoration:none;"><button style="background-color:#FF9933;color:white;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-weight:bold;">📥 Get PDF</button></a>'
         st.markdown(href, unsafe_allow_html=True)
 
 # TABS
