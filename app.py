@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import requests
-from io import StringIO
+from io import StringIO, BytesIO
 from github import Github, Auth
 from streamlit_lottie import st_lottie
 import streamlit.components.v1 as components
@@ -32,6 +32,7 @@ def load_lottieurl(url):
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
+anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") # Placeholder for Sun
 
 # GMR COLORS: Blue #003399 | Orange #FF9933 | Red #FF3333 | Dark #002244
 st.markdown("""
@@ -65,16 +66,16 @@ st.markdown("""
     }
     
     /* GMR BRANDED BORDERS */
-    .border-good { border-top: 4px solid #00ff88; } /* Keep Green for Good Performance */
-    .border-bad { border-top: 4px solid #FF3333; } /* GMR Red for Alert */
-    .border-gmr { border-top: 4px solid #FF9933; } /* GMR Orange for Neutral */
+    .border-good { border-top: 4px solid #00ff88; }
+    .border-bad { border-top: 4px solid #FF3333; }
+    .border-gmr { border-top: 4px solid #FF9933; }
     
     /* PLACARDS */
     .placard {
         background: #002244; padding: 15px; border-radius: 8px; 
         margin-bottom: 10px; text-align: left;
         transition: all 0.3s ease;
-        border-left: 4px solid #FF9933; /* GMR Orange Default */
+        border-left: 4px solid #FF9933;
     }
     .placard:hover { background: #003366; }
     .p-title { font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; font-weight: 400;}
@@ -82,7 +83,7 @@ st.markdown("""
     .p-sub { font-size: 12px; color: #aaa; font-weight: 300; }
     
     /* TEXT */
-    .big-money { font-size: 32px; font-weight: 800; color: #FF9933; } /* GMR Orange */
+    .big-money { font-size: 32px; font-weight: 800; color: #FF9933; }
     .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #ffffff33; padding-bottom: 10px; margin-bottom: 15px; color: white; }
     
     /* ANIMATIONS */
@@ -93,19 +94,13 @@ st.markdown("""
     }
     .pulse-icon { animation: pulse 2s infinite; }
     
-    /* RESPONSIVE */
-    @media (max-width: 768px) {
-        .glass-card { margin-bottom: 10px; padding: 15px; }
-        .stColumns .stColumn > div > div { display: block !important; }
-    }
-    
     /* PROGRESS BAR */
     .progress { background: #002244; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #FF3333, #FF9933); transition: width 0.3s; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. GITHUB ENGINE ---
+# --- 3. HELPER FUNCTIONS ---
 def init_github():
     try:
         if "GITHUB_TOKEN" in st.secrets:
@@ -117,7 +112,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v16.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v18.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -127,16 +122,28 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v16.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v16.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v18.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v18.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
+
+def generate_excel_template():
+    # Helper to generate a template dataframe
+    df = pd.DataFrame({
+        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
+                      'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
+                      'NOx (mg/Nm3)', 'Ash Util (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
+        'Unit 1': [8.4, 2380, -0.90, 535, 135, 20, 550, 400, 1500, 0, 0],
+        'Unit 2': [8.2, 2310, -0.92, 538, 132, 18, 540, 390, 1400, 0, 0],
+        'Unit 3': [8.5, 2290, -0.93, 540, 130, 15, 530, 380, 1600, 0, 0]
+    })
+    return df
 
 # --- 4. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     # Unpack Design Values Specific to Unit
     TARGET_HR = design_vals['target_hr']
-    DESIGN_HR = 2250 # Fixed Design
+    DESIGN_HR = 2250 
     COAL_GCV = design_vals['gcv']
     LIMIT_SOX = design_vals['limit_sox']
     LIMIT_NOX = design_vals['limit_nox']
@@ -146,11 +153,9 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
-    
-    # Money
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
-    # Trees & Land Logic
+    # Trees & Land
     trees_count = abs(carbon_tons / 0.025)
     acres_land = trees_count / 500
     
@@ -161,7 +166,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
     theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 
     l_unacc = max(0, hr - theo_hr - abs(l_vac))
-    
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
@@ -180,8 +184,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_util * 666
     bricks_potential_total = ash_gen * 666
     
-    # Burj Khalifa Logic (1 Burj Khalifa structure ~= 165 Million bricks equivalent volume)
-    burj_khalifa_count = bricks_current / 165_000_000
+    # Burj Khalifa Logic (Converted to Percentage)
+    burj_pct = (bricks_current / 165_000_000) * 100
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, 
@@ -193,20 +197,44 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         "emissions": {"carbon_intensity": carbon_intensity, "specific_sox": specific_sox, "specific_nox": specific_nox},
         "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
                 "bricks_made": bricks_current, "bricks_potential": bricks_potential_total,
-                "burj_count": burj_khalifa_count}
+                "burj_pct": burj_pct}
     }
 
 # --- 5. SIDEBAR INPUTS ---
 with st.sidebar:
     # GMR LOGO
     try:
-        st.image("1000051706.png", width="stretch") # Replaced use_container_width with width="stretch" per instructions
+        st.image("1000051706.png", width="stretch")
     except:
         st.markdown("## **GMR POWER**") 
         
     st.title("Control Panel")
     
-    tab_input, tab_ash, tab_config = st.tabs(["📝 Daily", "🪨 Ash/Coal", "⚙️ Config"])
+    # EXCEL UPLOAD FEATURE
+    st.markdown("### 📤 Bulk Upload")
+    uploaded_file = st.file_uploader("Upload Daily Data (Excel)", type=['xlsx'])
+    
+    # Default values dictionary
+    defaults = {}
+    if uploaded_file is not None:
+        try:
+            df_up = pd.read_excel(uploaded_file)
+            df_up.set_index('Parameter', inplace=True)
+            defaults = df_up.to_dict()
+            st.success("Data Loaded from Excel!")
+        except:
+            st.error("Invalid Format")
+    
+    # Download Template Button
+    template_df = generate_excel_template()
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        template_df.to_excel(writer, index=False)
+    st.download_button("📥 Download Excel Template", data=output.getvalue(), file_name="daily_log_template.xlsx")
+
+    st.markdown("---")
+    
+    tab_input, tab_ash, tab_renew, tab_config = st.tabs(["📝 Daily", "🪨 Ash", "☀️ Green", "⚙️ Config"])
     
     # --- TAB: CONFIG ---
     with tab_config:
@@ -223,22 +251,34 @@ with st.sidebar:
         t_u3 = st.number_input("U3 Target HR", value=2295)
         g_u3 = st.number_input("U3 GCV", value=3620)
 
-    # --- TAB: ASH/COAL PARAMETERS ---
+    # --- TAB: ASH PARAMETERS ---
     with tab_ash:
-        st.markdown("### 🧪 Coal Analysis (Common)")
-        coal_ash = st.number_input("Ash Content (%)", 0.0, 60.0, 35.0)
-        coal_moist = st.number_input("Moisture (%)", 0.0, 50.0, 12.0)
-        coal_fc = st.number_input("Fixed Carbon (%)", 0.0, 100.0, 30.0)
+        coal_ash = st.number_input("Ash Content (%)", 35.0)
+        pond_cap = st.number_input("Pond Capacity (Tons)", 500000)
+        pond_curr = st.number_input("Current Stock (Tons)", 350000)
         
-        st.markdown("### 🚜 Ash Management")
-        pond_cap = st.number_input("Total Pond Capacity (Tons)", value=500000)
-        pond_curr = st.number_input("Current Pond Stock (Tons)", value=350000)
-        
-        st.markdown("### 🏗️ Utilization (Tons/Day)")
-        u1_ash_ut = st.number_input("U1 Ash Utilized", value=1500.0)
-        u2_ash_ut = st.number_input("U2 Ash Utilized", value=1400.0)
-        u3_ash_ut = st.number_input("U3 Ash Utilized", value=1600.0)
+        # Get defaults from Excel if available, else manual
+        def get_val(u, row, def_val):
+            if uploaded_file and u in defaults and row in defaults[u]:
+                return float(defaults[u][row])
+            return def_val
 
+        u1_ash_ut = st.number_input("U1 Ash Utilized", value=get_val('Unit 1', 'Ash Util (Tons)', 1500.0))
+        u2_ash_ut = st.number_input("U2 Ash Utilized", value=get_val('Unit 2', 'Ash Util (Tons)', 1400.0))
+        u3_ash_ut = st.number_input("U3 Ash Utilized", value=get_val('Unit 3', 'Ash Util (Tons)', 1600.0))
+
+    # --- TAB: RENEWABLES (BIOMASS & SOLAR) ---
+    with tab_renew:
+        st.markdown("### 🌱 Biomass Co-firing")
+        # Global inputs for simplicity (or split per unit if needed)
+        bio_u1 = st.number_input("U1 Biomass (Tons)", value=get_val('Unit 1', 'Biomass (Tons)', 0.0))
+        bio_u2 = st.number_input("U2 Biomass (Tons)", value=get_val('Unit 2', 'Biomass (Tons)', 0.0))
+        bio_u3 = st.number_input("U3 Biomass (Tons)", value=get_val('Unit 3', 'Biomass (Tons)', 0.0))
+        bio_gcv = st.number_input("Biomass GCV", value=3000.0)
+        
+        st.markdown("### ☀️ Solar Generation")
+        sol_u1 = st.number_input("Solar Gen (MU)", value=get_val('Unit 1', 'Solar (MU)', 0.0)) # Plant wide usually, but keeping struct
+        
     # --- TAB: DAILY INPUTS ---
     with tab_input:
         date_in = st.date_input("Log Date", datetime.now())
@@ -251,27 +291,18 @@ with st.sidebar:
         ash_utils = [u1_ash_ut, u2_ash_ut, u3_ash_ut]
         
         for i in range(1, 4):
+            u_key = f'Unit {i}'
             with st.expander(f"Unit {i} Inputs", expanded=(i==1)):
-                gen = st.number_input(f"U{i} Gen (MU) ⚡", 0.0, 12.0, 8.4, key=f"g{i}")
-                hr = st.number_input(f"U{i} HR (kcal) 🌡️", 2000, 3000, 2380 if i==1 else 2310, key=f"h{i}")
+                gen = st.number_input(f"U{i} Gen (MU)", value=get_val(u_key, 'Generation (MU)', 8.4), key=f"g{i}")
+                hr = st.number_input(f"U{i} HR (kcal)", value=get_val(u_key, 'Heat Rate (kcal/kWh)', 2380.0), key=f"h{i}")
                 
-                st.markdown(f"**U{i} Parameters**")
-                vac = st.number_input(f"Vacuum (kg/cm2)", value=-0.90, step=0.001, format="%.3f", key=f"v{i}")
-                vac_progress = max(0, min(100, (vac + 0.92) / 0.01 * 100))
-                st.markdown(f'<div class="progress"><div class="progress-fill" style="width: {vac_progress}%"></div></div>', unsafe_allow_html=True)
+                vac = st.number_input(f"Vacuum", value=get_val(u_key, 'Vacuum (kg/cm2)', -0.90), step=0.001, format="%.3f", key=f"v{i}")
+                ms = st.number_input(f"MS Temp", value=get_val(u_key, 'MS Temp (C)', 535.0), key=f"m{i}")
+                fg = st.number_input(f"FG Temp", value=get_val(u_key, 'FG Temp (C)', 135.0), key=f"f{i}")
+                spray = st.number_input(f"Spray", value=get_val(u_key, 'Spray (TPH)', 20.0), key=f"s{i}")
                 
-                ms = st.number_input(f"MS Temp", 500, 550, 535, key=f"m{i}")
-                fg = st.number_input(f"FG Temp ☁️", 100, 160, 135, key=f"f{i}")
-                spray = st.number_input(f"Spray", 0, 100, 20, key=f"s{i}")
-                
-                st.markdown(f"**U{i} Emissions**")
-                sox = st.number_input(f"SOx", 0, 1000, 550 if i!=2 else 650, key=f"sx{i}")
-                sox_border = "2px solid #FF3333" if sox > lim_sox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{sox}" style="border: {sox_border};" disabled>', unsafe_allow_html=True)
-                
-                nox = st.number_input(f"NOx", 0, 1000, 400, key=f"nx{i}")
-                nox_border = "2px solid #FF3333" if nox > lim_nox else "2px solid #00ff88"
-                st.markdown(f'<input type="number" value="{nox}" style="border: {nox_border};" disabled>', unsafe_allow_html=True)
+                sox = st.number_input(f"SOx", value=get_val(u_key, 'SOx (mg/Nm3)', 550.0), key=f"sx{i}")
+                nox = st.number_input(f"NOx", value=get_val(u_key, 'NOx (mg/Nm3)', 400.0), key=f"nx{i}")
                 
                 ash_p = {'ash_pct': coal_ash, 'util_tons': ash_utils[i-1]}
                 units_data.append(calculate_unit(str(i), gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
@@ -305,34 +336,42 @@ fleet_ash_stock = fleet_ash_gen - fleet_ash_util
 daily_dump = max(1, fleet_ash_stock)
 pond_days_left = (pond_cap - pond_curr) / daily_dump if daily_dump > 0 else 9999
 
+# Renewables Calculation
+total_biomass = bio_u1 + bio_u2 + bio_u3
+# Heat from Biomass (kcal) -> Equivalent Coal (Tons) -> CO2 Avoided
+bio_heat = total_biomass * bio_gcv * 1000
+coal_equiv_bio = bio_heat / 3600 # Using Avg Coal GCV 3600
+bio_co2_saved = coal_equiv_bio * 1.7 # 1.7 emission factor
+
+solar_co2_saved = sol_u1 * 1000 * 0.95 # Approx 0.95 Ton CO2 per MWh thermal displacement
+total_green_co2 = bio_co2_saved + solar_co2_saved
+green_trees = total_green_co2 / 0.025
+green_homes = (total_biomass * 3 + sol_u1 * 1000) / 10 # Approx 10kWh/day/home
+
 # --- 6. MAIN PAGE LAYOUT ---
 st.title("🏭 GMR Kamalanga 5S Dashboard")
 st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥 Loss Making'} | **Net Daily P&L:** ₹ {fleet_profit:,.0f}")
 
 # TABS NAVIGATION
-tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "🪨 Ash Mgmt", "📚 Info", "📈 Trends", "🎮 Simulator", "🌿 Compliance"])
+tabs = st.tabs(["🏠 War Room", "UNIT-1 Detail", "UNIT-2 Detail", "UNIT-3 Detail", "🪨 Ash Mgmt", "☀️ Renewables", "📚 Info", "📈 Trends", "🎮 Simulator", "🌿 Compliance"])
 
-# --- TAB 1: WAR ROOM (Executive View) ---
+# --- TAB 1: WAR ROOM ---
 with tabs[0]:
-    # GMR LOGO IN WAR ROOM
     c_logo, c_title = st.columns([1, 5])
     with c_logo:
         try:
-            st.image("1000051706.png", width="stretch") # GMR Logo
+            st.image("1000051706.png", width="stretch")
         except:
             st.write("GMR")
     with c_title:
         st.markdown("### 🚁 Fleet Executive Summary")
-    
     st.divider()
     
-    # Alert Banner
     if fleet_profit < 0:
         st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid #FF3333;">⚠️ Fleet Alert: Efficiency Loss Detected</div>', unsafe_allow_html=True)
     
     cols = st.columns(4) 
     
-    # UNIT CARDS
     for i, u in enumerate(units_data):
         color = "#00ff88" if u['profit'] > 0 else "#FF3333"
         border = "border-good" if u['profit'] > 0 else "border-bad"
@@ -357,7 +396,6 @@ with tabs[0]:
             </div>
             """, unsafe_allow_html=True)
             
-    # ASH POND LIFE CARD
     with cols[3]:
         pond_color = "#00ff88" if pond_days_left > 30 else "#FF3333"
         st.markdown(f"""
@@ -373,11 +411,9 @@ with tabs[0]:
         </div>
         """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTION FOR UNIT DETAIL TABS ---
+# --- HELPER FUNCTION FOR UNIT DETAIL ---
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Deep Dive: Unit {u['id']}")
-    
-    # Row 1: Speedometer & Big Visuals
     c1, c2, c3 = st.columns([1, 1, 1])
     
     with c1:
@@ -400,11 +436,9 @@ def render_unit_detail(u, configs):
         if u['profit'] > 0:
             if anim_tree: st_lottie(anim_tree, height=180, key=f"t_{u['id']}")
             st.success(f"**Great Job!** You avoided {abs(u['carbon']):.1f} tons of CO2.")
-            st.caption(f"Equivalent to planting **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres**.")
         else:
             if anim_smoke: st_lottie(anim_smoke, height=180, key=f"s_{u['id']}")
             st.error(f"**High Emissions!** Excess {abs(u['carbon']):.1f} tons of CO2.")
-            st.warning(f"Offset required: **{u['trees']:,.0f} trees** on **{u['acres']:.1f} acres**.")
 
     with c3:
         st.markdown("#### 📜 5S & Compliance")
@@ -417,15 +451,12 @@ def render_unit_detail(u, configs):
         </div>
         """, unsafe_allow_html=True)
         
-        # Acid Rain Warning
         if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
              st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid #FF3333; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
         else:
              st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid #00ff88; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
 
     st.divider()
-    
-    # Row 2: Placards & Loss Analysis
     r2_c1, r2_c2 = st.columns([1, 2])
     
     with r2_c1:
@@ -467,12 +498,11 @@ with tabs[1]: render_unit_detail(units_data[0], configs)
 with tabs[2]: render_unit_detail(units_data[1], configs)
 with tabs[3]: render_unit_detail(units_data[2], configs)
 
-# --- NEW TAB 4: ASH MANAGEMENT ---
+# --- TAB 4: ASH MANAGEMENT ---
 with tabs[4]:
     st.markdown("### 🪨 Ash & By-Product Management")
     st.divider()
     
-    # Summary Row
     a1, a2, a3 = st.columns(3)
     with a1:
         st.metric("Total Ash Generated", f"{fleet_ash_gen:,.0f} Tons", delta=f"{fleet_ash_gen*0.01:.0f}% of Coal")
@@ -484,28 +514,24 @@ with tabs[4]:
         
     st.divider()
     
-    # Brick Simulation & Pond Life
     ash1, ash2 = st.columns([1, 1])
     
     with ash1:
         st.markdown("#### 🧱 Brick Manufacturing Potential")
         total_bricks = sum(u['ash']['bricks_made'] for u in units_data)
         
-        # BURJ KHALIFA LOGIC
-        total_burjs = sum(u['ash']['burj_count'] for u in units_data)
+        # BURJ KHALIFA FIX: Percentage Calculation
+        total_burj_pct = sum(u['ash']['burj_pct'] for u in units_data)
         
         st.info(f"**Current Utilization:** Enough to make **{total_bricks:,.0f} Bricks** today.")
         
-        # BURJ KHALIFA METRIC DISPLAY
         st.markdown(f"""
         <div style="background: linear-gradient(to right, #002244, #003366); padding: 15px; border-radius: 10px; border: 1px solid #FF9933; margin-top: 10px;">
             <h4 style="color: #FF9933; margin:0;">🏙️ Burj Khalifa Scale</h4>
-            <p style="color: white; font-size: 18px;">With this amount of ash, you could build <b style="font-size: 24px; color: #00ff88;">{total_burjs:.2f}</b> Burj Khalifas!</p>
-            <p style="font-size: 11px; color: #aaa;">(Equivalent material volume)</p>
+            <p style="color: white; font-size: 18px;">This ash volume represents <b style="font-size: 24px; color: #00ff88;">{total_burj_pct:.2f}%</b> of a Burj Khalifa structure!</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Comparison Chart
         df_ash = pd.DataFrame({
             "Scenario": ["Zero Utilization", "Current Actual", "100% Target"],
             "Bricks": [0, total_bricks, sum(u['ash']['bricks_potential'] for u in units_data)]
@@ -516,18 +542,12 @@ with tabs[4]:
 
     with ash2:
         st.markdown("#### 🌊 Ash Pond Survival")
-        
         fig_pond = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = pond_days_left,
-            title = {'text': "Days to Overflow"},
+            mode = "gauge+number", value = pond_days_left, title = {'text': "Days to Overflow"},
             gauge = {
                 'axis': {'range': [0, 3650]}, 
                 'bar': {'color': "#00ff88" if pond_days_left > 365 else "#FF3333"},
-                'steps': [
-                    {'range': [0, 180], 'color': "rgba(255,0,0,0.3)"},
-                    {'range': [180, 3650], 'color': "rgba(0,255,0,0.1)"}
-                ]
+                'steps': [{'range': [0, 180], 'color': "rgba(255,0,0,0.3)"}, {'range': [180, 3650], 'color': "rgba(0,255,0,0.1)"}]
             }
         ))
         fig_pond.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', font_color='white')
@@ -538,8 +558,6 @@ with tabs[4]:
         else:
             st.success(f"Safe: Pond has {pond_days_left/365:.1f} years of life remaining.")
 
-    # Unit-wise Ash Table
-    st.markdown("#### Unit-wise Ash Breakdown")
     ash_table = []
     for u in units_data:
         ash_table.append({
@@ -551,130 +569,119 @@ with tabs[4]:
         })
     st.dataframe(pd.DataFrame(ash_table), width="stretch")
 
-# --- TAB 6: INFO ---
+# --- NEW TAB 5: RENEWABLES (GREEN) ---
 with tabs[5]:
-    st.markdown("### 📚 Plant Overview & Logic")
+    st.markdown("### ☀️ Renewables & Sustainability (Sustain Pillar)")
+    st.info("Carbon credits reward verifiable GHG reductions. Biomass is carbon-neutral as CO₂ released equals what plants absorbed. Solar displaces thermal generation.")
+    st.divider()
     
-    # PLANT IMAGE HERE
+    g1, g2 = st.columns([1, 1])
+    
+    with g1:
+        st.markdown("#### 🌱 Biomass Co-firing Impact")
+        st.metric("Biomass Utilized", f"{total_biomass} Tons")
+        st.metric("Coal Displaced", f"{coal_equiv_bio:.2f} Tons", delta="Carbon Neutral")
+        st.metric("CO2 Avoided (Biomass)", f"{bio_co2_saved:.2f} Tons", delta_color="normal")
+        
+    with g2:
+        st.markdown("#### ☀️ Solar Generation Impact")
+        st.metric("Solar Generation", f"{sol_u1} MU")
+        st.metric("Thermal Power Displaced", f"{sol_u1} MU")
+        st.metric("CO2 Avoided (Solar)", f"{solar_co2_saved:.2f} Tons", delta_color="normal")
+    
+    st.divider()
+    st.markdown("#### 🌏 Total Green Impact")
+    
+    col_g_1, col_g_2, col_g_3 = st.columns(3)
+    with col_g_1:
+        st.markdown(f"""
+        <div class="glass-card" style="border-top: 4px solid #00ff88;">
+            <div class="big-money" style="color:#00ff88">{total_green_co2:.2f} Tons</div>
+            <div class="p-sub">Total CO2 Avoided Today</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_g_2:
+        st.markdown(f"""
+        <div class="glass-card">
+            <div class="big-money" style="color:#00ccff">{green_trees:,.0f}</div>
+            <div class="p-sub">Equivalent Trees Planted</div>
+        </div>
+        """, unsafe_allow_html=True)
+        if anim_tree: st_lottie(anim_tree, height=100, key="green_tree")
+        
+    with col_g_3:
+        st.markdown(f"""
+        <div class="glass-card">
+            <div class="big-money" style="color:#FF9933">{green_homes:,.0f}</div>
+            <div class="p-sub">Homes Powered with Clean Energy</div>
+        </div>
+        """, unsafe_allow_html=True)
+        if anim_sun: st_lottie(anim_sun, height=100, key="sun")
+
+# --- TAB 6: INFO ---
+with tabs[6]:
+    st.markdown("### 📚 Plant Overview & Logic")
     try:
         st.image("1000051705.jpg", caption="GMR Kamalanga Energy Limited", width="stretch")
     except:
-        st.info("Plant image not found. Please upload '1000051705.jpg' to the folder.")
+        st.info("Plant image missing.")
 
     st.divider()
     info_c1, info_c2 = st.columns(2)
-    
     with info_c1:
-        st.markdown("""
-        <div class="glass-card">
-            <h3 style="color:#FF9933">PAT ESCerts</h3>
-            <p><b>Formula:</b> <code>(Target HR - Actual HR) × Gen (MU) × 10⁶ / 10⁷</code></p>
-            <p>1 ESCert = 1 MTOE (Metric Tonne Oil Equivalent)</p>
-            <p>1 MTOE = 10 Million kcal Heat Energy</p>
-        </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown("""<div class="glass-card"><h3 style="color:#FF9933">PAT ESCerts</h3><p>Formula: (Target - Actual) * Gen / 10^7</p></div>""", unsafe_allow_html=True)
     with info_c2:
-        st.markdown("""
-        <div class="glass-card">
-            <h3 style="color:#00ccff">Carbon Credits</h3>
-            <p><b>Formula:</b> <code>Coal Saved (Tons) × 1.7</code></p>
-            <p>1.7 is the weighted avg emission factor for Indian Coal.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle Logic")
+        st.markdown("""<div class="glass-card"><h3 style="color:#00ccff">Carbon Credits</h3><p>Formula: Coal Saved * 1.7</p></div>""", unsafe_allow_html=True)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Rankine_cycle_with_superheat.jpg/640px-Rankine_cycle_with_superheat.jpg", caption="Reference: Rankine Cycle")
 
 # --- TAB 7: TRENDS ---
-with tabs[6]:
+with tabs[7]:
     st.markdown("### 📈 Historical Performance")
-    period = st.radio("Select Period:", ["Last 7 Days (Weekly)", "Last 30 Days (Monthly)"], horizontal=True)
-    
+    period = st.radio("Select Period:", ["Last 7 Days", "Last 30 Days"], horizontal=True)
     repo = init_github()
     if repo:
         df_hist, sha = load_history(repo)
         if not df_hist.empty:
-            if "7 Days" in period:
-                cutoff = datetime.now() - timedelta(days=7)
-            else:
-                cutoff = datetime.now() - timedelta(days=30)
-            
+            if "7 Days" in period: cutoff = datetime.now() - timedelta(days=7)
+            else: cutoff = datetime.now() - timedelta(days=30)
             df_hist = df_hist[df_hist['Date'] >= cutoff]
-            
             if not df_hist.empty:
-                st.markdown("#### Heat Rate Trend")
                 fig_hr = px.line(df_hist, x="Date", y="HR", color="Unit", markers=True, template="plotly_dark")
-                fig_hr.update_layout(showlegend=True, xaxis_title="Date", yaxis_title="HR (kcal/kWh)", font_color='white')
-                fig_hr.update_xaxes(showgrid=True, gridcolor='#333')
                 st.plotly_chart(fig_hr, width="stretch")
-                
-                st.markdown("#### Profit/Loss Trend")
                 fig_pl = px.bar(df_hist, x="Date", y="Profit", color="Unit", barmode="group", template="plotly_dark")
-                fig_pl.update_layout(showlegend=True, xaxis_title="Date", yaxis_title="Profit (₹)", font_color='white')
-                fig_pl.update_xaxes(showgrid=True, gridcolor='#333')
                 st.plotly_chart(fig_pl, width="stretch")
-            else:
-                st.warning("No data found for the selected period.")
-        else:
-            st.info("No history saved yet.")
-    else:
-        st.warning("GitHub not connected.")
+            else: st.warning("No data.")
+        else: st.info("No history.")
+    else: st.warning("GitHub not connected.")
 
 # --- TAB 8: SIMULATOR ---
-with tabs[7]:
+with tabs[8]:
     st.markdown("### 🎮 What-If Simulator")
     if anim_money: st_lottie(anim_money, height=150)
-    
     c_sim1, c_sim2 = st.columns([1, 2])
     with c_sim1:
-        s_vac = st.slider("Simulate Vacuum Improvement", -0.85, -0.99, -0.90)
-        s_gen = st.slider("Simulate Load (MW)", 300, 350, 350)
-        s_ms = st.slider("MS Temp", 500, 550, 535)
-        s_fg = st.slider("FG Temp", 100, 160, 135)
-        s_spray = st.slider("Spray", 0, 100, 20)
+        s_vac = st.slider("Simulate Vacuum", -0.85, -0.99, -0.90)
+        s_gen = st.slider("Simulate Load", 300, 350, 350)
     with c_sim2:
-        sim_inputs = {'vac': s_vac, 'ms': s_ms, 'fg': s_fg, 'spray': s_spray, 'sox': 550, 'nox': 400}
+        sim_inputs = {'vac': s_vac, 'ms': 535, 'fg': 135, 'spray': 20, 'sox': 550, 'nox': 400}
         sim_unit = calculate_unit("1", s_gen / 100, 2350, sim_inputs, configs[0], {'ash_pct': 35, 'util_tons': 1000}) 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Current Profit", f"₹ {units_data[0]['profit']:,.0f}")
-        with col2:
-            st.metric("Simulated Profit", f"₹ {sim_unit['profit']:,.0f}", delta=f"{sim_unit['profit'] - units_data[0]['profit']:,.0f}")
+        st.metric("Simulated Profit", f"₹ {sim_unit['profit']:,.0f}")
 
 # --- TAB 9: COMPLIANCE ---
-with tabs[8]:
-    st.markdown("### 🌿 Emissions Compliance & Carbon Accounting")
+with tabs[9]:
+    st.markdown("### 🌿 Emissions Compliance")
     st.divider()
-    
+    col1, col2, col3, col4 = st.columns(4)
     total_gen = sum(u['gen'] for u in units_data)
     fleet_carbon = sum(u['carbon'] for u in units_data)
     fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
-    fleet_nox = sum(u['nox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
-    fleet_ci = sum(u['emissions']['carbon_intensity'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Fleet CO2 (Tons)", f"{fleet_carbon:.2f}", delta=f"{fleet_carbon:.2f}")
-    with col2:
-        sox_comp = "✅" if fleet_sox < lim_sox else "❌"
-        st.metric(f"Avg SOx/MWh {sox_comp}", f"{fleet_sox:.1f}", delta=f"{fleet_sox - lim_sox:.1f}")
-    with col3:
-        nox_comp = "✅" if fleet_nox < lim_nox else "❌"
-        st.metric(f"Avg NOx/MWh {nox_comp}", f"{fleet_nox:.1f}", delta=f"{fleet_nox - lim_nox:.1f}")
-    with col4:
-        st.metric("Carbon Intensity (Tons/MWh)", f"{fleet_ci:.2f}")
-    
-    if fleet_sox > lim_sox or fleet_nox > lim_nox:
-        st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; border:1px solid #FF3333; text-align:center; margin:20px 0;">⚠️ FLEET ACID RAIN RISK<br>High Average SOx/NOx Levels</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:15px; border-radius:8px; border:1px solid #00ff88; text-align:center; margin:20px 0;">✅ Fleet Safe Emissions</div>', unsafe_allow_html=True)
+    with col1: st.metric("Fleet CO2", f"{fleet_carbon:.2f} T")
+    with col2: st.metric("Avg SOx", f"{fleet_sox:.1f}")
     
     st.divider()
-    
-    st.markdown("#### 📊 Carbon Ledger")
     ledger_df = pd.DataFrame([
-        {"Item": "Daily CO2", "Value": f"{fleet_carbon:.2f} Tons", "Offset": f"{sum(u['trees'] for u in units_data):,.0f} Trees"},
-        {"Item": "ESCerts Offset", "Value": f"{sum(u['escerts'] for u in units_data):.2f} Certs", "Value (₹)": f"₹ {sum(u['escerts'] * 1000 for u in units_data):,.0f}"},
-        {"Item": "Net Balance", "Value": "Towards Net-Zero", "Status": "🟢 Positive" if fleet_carbon < 0 else "🔴 Negative"}
+        {"Item": "Daily CO2", "Value": f"{fleet_carbon:.2f} Tons"},
+        {"Item": "ESCerts Offset", "Value (₹)": f"₹ {sum(u['escerts'] * 1000 for u in units_data):,.0f}"}
     ])
     st.dataframe(ledger_df, width="stretch")
