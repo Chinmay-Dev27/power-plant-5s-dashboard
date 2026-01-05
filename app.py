@@ -32,7 +32,7 @@ def load_lottieurl(url):
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
-anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") # Placeholder for Sun
+anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") 
 
 # GMR COLORS: Blue #003399 | Orange #FF9933 | Red #FF3333 | Dark #002244
 st.markdown("""
@@ -112,7 +112,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v18.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v19.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -122,8 +122,8 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v18.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v18.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v19.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v19.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -185,6 +185,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_potential_total = ash_gen * 666
     
     # Burj Khalifa Logic (Converted to Percentage)
+    # 1 Burj = 165 Million bricks equivalent
     burj_pct = (bricks_current / 165_000_000) * 100
     
     return {
@@ -219,16 +220,18 @@ with st.sidebar:
     if uploaded_file is not None:
         try:
             df_up = pd.read_excel(uploaded_file)
+            # Assuming format: Parameter column + Unit 1, Unit 2, Unit 3 columns
             df_up.set_index('Parameter', inplace=True)
             defaults = df_up.to_dict()
             st.success("Data Loaded from Excel!")
         except:
-            st.error("Invalid Format")
+            st.error("Invalid Excel Format. Download Template.")
     
     # Download Template Button
     template_df = generate_excel_template()
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    # ERROR FIX: Using openpyxl explicitly to avoid xlsxwriter dependency crash
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         template_df.to_excel(writer, index=False)
     st.download_button("📥 Download Excel Template", data=output.getvalue(), file_name="daily_log_template.xlsx")
 
@@ -257,10 +260,11 @@ with st.sidebar:
         pond_cap = st.number_input("Pond Capacity (Tons)", 500000)
         pond_curr = st.number_input("Current Stock (Tons)", 350000)
         
-        # Get defaults from Excel if available, else manual
+        # Helper to get value safely
         def get_val(u, row, def_val):
             if uploaded_file and u in defaults and row in defaults[u]:
-                return float(defaults[u][row])
+                try: return float(defaults[u][row])
+                except: return def_val
             return def_val
 
         u1_ash_ut = st.number_input("U1 Ash Utilized", value=get_val('Unit 1', 'Ash Util (Tons)', 1500.0))
@@ -277,7 +281,7 @@ with st.sidebar:
         bio_gcv = st.number_input("Biomass GCV", value=3000.0)
         
         st.markdown("### ☀️ Solar Generation")
-        sol_u1 = st.number_input("Solar Gen (MU)", value=get_val('Unit 1', 'Solar (MU)', 0.0)) # Plant wide usually, but keeping struct
+        sol_u1 = st.number_input("Solar Gen (MU)", value=get_val('Unit 1', 'Solar (MU)', 0.0))
         
     # --- TAB: DAILY INPUTS ---
     with tab_input:
