@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 import base64
 import tempfile
+import os
 
-# Force matplotlib to use a non-interactive backend for server-side generation
+# Force matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
 
 # --- 1. CONFIGURATION & CSS ---
@@ -36,9 +37,11 @@ def load_lottieurl(url):
         return r.json() if r.status_code == 200 else None
     except: return None
 
+# Initialize Animations Globally
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
+anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") 
 
 # GMR COLORS
 st.markdown("""
@@ -75,23 +78,26 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v21.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v22.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
-    except: return pd.DataFrame(columns=["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen"]), None
+    except: 
+        # UPDATED: Extended schema to support bulk data tracking
+        cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Biomass", "Solar", "Coal Ash %"]
+        return pd.DataFrame(columns=cols), None
 
 def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v21.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v21.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v22.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v22.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
 def generate_excel_template():
-    # Helper to generate a template dataframe for DAILY single upload
+    # DAILY single upload template
     df = pd.DataFrame({
         'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
                       'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
@@ -103,11 +109,11 @@ def generate_excel_template():
     return df
 
 def generate_bulk_template():
-    # FULL SPECTRUM BULK TEMPLATE
+    # UPDATED: Added Ash %, Biomass, Solar columns for full back-dating
     df = pd.DataFrame({
         'Date': ['2024-01-01', '2024-01-01', '2024-01-01'],
         'Unit': ['1', '2', '3'],
-        'Profit': [50000, -20000, 10000], # User can estimate or we calc later
+        'Profit': [50000, -20000, 10000], 
         'HR': [2380, 2310, 2290],
         'Gen': [8.4, 8.2, 8.5],
         'Vacuum': [-0.90, -0.92, -0.93],
@@ -117,6 +123,7 @@ def generate_bulk_template():
         'SOx': [550, 540, 530],
         'NOx': [400, 390, 380],
         'Ash Util': [1500, 1400, 1600],
+        'Coal Ash %': [35.0, 35.0, 35.0],
         'Biomass': [0, 0, 0],
         'Solar': [0, 0, 0]
     })
@@ -178,7 +185,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(0, 10, f"Detailed Analysis: Unit {u['id']}", 0, 1)
         pdf.ln(5)
         
-        # Parameters Table
         pdf.set_font("Arial", 'B', 10)
         pdf.set_text_color(0, 0, 0)
         pdf.cell(40, 10, "Parameter", 1)
@@ -187,7 +193,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.ln()
         
         pdf.set_font("Arial", size=10)
-        # Reconstruct technical data
         tech_map = [
             ("Vacuum", u['losses']['Vacuum']),
             ("MS Temp", u['losses']['MS Temp']),
@@ -196,7 +201,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         ]
         for item, val in tech_map:
             pdf.cell(40, 10, item, 1)
-            pdf.cell(40, 10, "-", 1) # Value hidden in summary dict, okay for report
+            pdf.cell(40, 10, "-", 1)
             pdf.cell(40, 10, f"{val:.1f}", 1)
             pdf.ln()
             
@@ -208,18 +213,14 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         plt.title(f"Unit {u['id']} Loss Breakdown (kcal/kWh)")
         plt.ylabel("Loss")
         
-        # Save plot to temp buffer
         img_buf = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(img_buf.name, format='png', bbox_inches='tight')
         plt.close()
         
-        # Insert Image
         pdf.image(img_buf.name, x=10, y=pdf.get_y(), w=150)
-        os.unlink(img_buf.name) # Clean up
+        os.unlink(img_buf.name)
         
         pdf.ln(80)
-        
-        # Placards Text
         pdf.set_font("Arial", 'B', 10)
         pdf.cell(0, 10, f"ESCerts Accumulated: {u['escerts']:.2f}", 0, 1)
         pdf.cell(0, 10, f"Carbon Credits: {u['carbon']:.2f} Tons", 0, 1)
@@ -234,13 +235,11 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=10)
     
-    # Ash Data
     pdf.cell(0, 10, f"Total Ash Generated: {ash_data['gen']:,.0f} Tons", 0, 1)
     pdf.cell(0, 10, f"Total Ash Utilized: {ash_data['util']:,.0f} Tons", 0, 1)
     pdf.cell(0, 10, f"Pond Life Remaining: {ash_data['pond_days']:.0f} Days", 0, 1)
     pdf.ln(5)
     
-    # Brick/Burj
     pdf.cell(0, 10, f"Brick Potential: {ash_data['bricks']:,.0f} Bricks", 0, 1)
     pdf.cell(0, 10, f"Burj Khalifa Scale: {ash_data['burj_pct']:.2f}% of one tower", 0, 1)
     pdf.ln(10)
@@ -331,7 +330,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # 2. BULK HISTORY UPLOAD (FULL FIELDS)
+    # 2. BULK HISTORY UPLOAD (UPDATED)
     with st.expander("📂 Bulk History Upload (Back-Date)"):
         bulk_file = st.file_uploader("Upload Multi-Day History", type=['csv'])
         if bulk_file:
@@ -339,13 +338,15 @@ with st.sidebar:
                 try:
                     df_bulk = pd.read_csv(bulk_file)
                     df_bulk['Date'] = pd.to_datetime(df_bulk['Date'])
-                    # Simple validation
-                    if 'Vacuum' not in df_bulk.columns:
-                        st.error("CSV missing columns (Vacuum, etc). Use new template.")
+                    # Validation for required fields
+                    req_cols = ['Date', 'Unit', 'Gen', 'Coal Ash %']
+                    if not all(col in df_bulk.columns for col in req_cols):
+                        st.error(f"CSV missing columns. Required: {req_cols}")
                     else:
                         repo = init_github()
                         if repo:
                             df_curr, sha = load_history(repo)
+                            # Ensure we append correctly even if columns differ slightly
                             df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
                             save_history(repo, df_comb, sha)
                             st.success(f"Success! {len(df_bulk)} rows added.")
@@ -428,12 +429,12 @@ with st.sidebar:
                 df_curr, sha = load_history(repo)
                 new_rows = []
                 for u in units_data:
-                    # Save all basic fields to match schema
                     new_rows.append({
                         "Date": date_in, "Unit": u['id'], "Profit": u['profit'], 
                         "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen'],
-                        "Vacuum": u['losses']['Vacuum'], "MS Temp": u['losses']['MS Temp'], # Saving derived losses or raw inputs? 
-                        # Ideally save raw inputs, but matching simple schema for now to avoid crash
+                        "Ash Util": u['ash']['utilized'], "Coal Ash %": coal_ash,
+                        "Biomass": bio_u1 if u['id']=='1' else (bio_u2 if u['id']=='2' else bio_u3),
+                        "Solar": sol_u1 if u['id']=='1' else 0
                     })
                 df_new = pd.DataFrame(new_rows)
                 df_comb = pd.concat([df_curr, df_new], ignore_index=True) if not df_curr.empty else df_new
@@ -475,7 +476,6 @@ st.markdown(f"**Fleet Status:** {'✅ Profitable' if fleet_profit > 0 else '🔥
 # HEADER BUTTONS
 c_head_L, c_head_R = st.columns([5, 1])
 with c_head_R:
-    # PDF DOWNLOAD BUTTON (A4 COMPREHENSIVE)
     if st.button("📄 Download A4 Report"):
         pdf_bytes = create_full_pdf(units_data, fleet_profit, ash_data_rep, green_data_rep)
         b64 = base64.b64encode(pdf_bytes).decode()
@@ -721,6 +721,7 @@ with tabs[5]:
         if anim_tree: st_lottie(anim_tree, height=100, key="green_tree")
     with col_g_3:
         st.markdown(f"""<div class="glass-card"><div class="big-money" style="color:#FF9933">{green_homes:,.0f}</div><div class="p-sub">Homes Powered</div></div>""", unsafe_allow_html=True)
+        # Safely render sun animation
         if anim_sun: st_lottie(anim_sun, height=100, key="sun")
 
 # --- TAB 6: INFO ---
