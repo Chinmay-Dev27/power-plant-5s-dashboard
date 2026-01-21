@@ -34,55 +34,18 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    /* GLOBAL THEME */
-    .stApp {
-        background-color: #f0f2f6;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        font-family: 'Roboto', sans-serif;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 50px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 20px;
-        color: #94a3b8;
-        font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F59E0B;
-        color: white;
-    }
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        text-align: center;
-        transition: transform 0.2s ease;
-    }
+    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
+    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    .burj-text {
-        font-family: 'Oswald', sans-serif;
-        font-size: 42px;
-        font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -111,6 +74,14 @@ def load_history(repo):
     try:
         file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
+        
+        # CRITICAL FIX 1: Enforce Numeric Types
+        cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
+        for c in cols:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        
+        # CRITICAL FIX 2: Standardize Date
         df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df, file.sha
     except: 
@@ -168,6 +139,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
+    
+    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -182,6 +155,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
+    
+    # Details Pages
     for u in units:
         pdf.add_page()
         pdf.set_font("Arial", 'B', 14)
@@ -199,6 +174,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.ln(60)
         pdf.set_font("Arial", size=10)
         pdf.cell(0, 10, f"ESCerts: {u['escerts']:.2f} | Carbon Credits: {u['carbon']:.2f}", 0, 1)
+
+    # Environment Page
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Environment & Ash", 0, 1)
@@ -206,22 +183,26 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", size=10)
     pdf.cell(0, 10, f"Ash Gen: {ash_data['gen']:.0f} T | Util: {ash_data['util']:.0f} T", 0, 1)
     pdf.cell(0, 10, f"Solar CO2 Saved: {green_data['sol_co2']:.2f} T", 0, 1)
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
+    
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
+    
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
     l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
     score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
+    
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
@@ -229,7 +210,9 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
+    
     homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100
+    
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts, "carbon": carbon_tons,
         "score": score, "sox": inputs['sox'], "nox": inputs['nox'],
@@ -246,6 +229,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
     c1, c2 = st.columns([1, 1])
+    
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
         target = configs[int(u['id'])-1]['target_hr']
@@ -260,6 +244,7 @@ def render_unit_detail(u, configs):
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
+
     with c2:
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
@@ -271,12 +256,23 @@ def render_unit_detail(u, configs):
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
     st.divider()
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #FF9933">
+            <div class="p-title">5S Score</div>
+            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
+            <div class="sub-lbl">Technical Hygiene</div>
+        </div>""", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #00ccff">
+            <div class="p-title">Carbon Credits</div>
+            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
+            <div class="sub-lbl">Tons CO2 Avoided</div>
+        </div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
@@ -286,10 +282,15 @@ with st.sidebar:
     
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     
+    # Init units_data early to avoid NameError
+    units_data = []
+    
     repo = init_github()
     hist_df, sha = load_history(repo)
+    
     hist_data = {}
     if not hist_df.empty:
+        # Filter matching date
         day_df = hist_df[hist_df['Date'] == date_in]
         if not day_df.empty:
             st.success(f"Data Found: {date_in}")
@@ -298,9 +299,6 @@ with st.sidebar:
         else:
             st.info("No history. Using inputs.")
     
-    # 1. INITIALIZE VARIABLE EARLY TO PREVENT NAME_ERROR
-    units_data = []
-
     with st.expander("📤 Upload Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
         daily_defaults = {}
@@ -339,8 +337,9 @@ with st.sidebar:
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
-        # Placeholders for download buttons
         col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            pass
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
 
@@ -362,8 +361,10 @@ with st.sidebar:
                    {'target_hr': t_u3, 'gcv': g_u3, 'limits':{'sox':lim_sox, 'nox':lim_nox}}]
         
         def val(u_id, row_key, col_key, def_v):
+            # Priority 1: History
             if u_id in hist_data and col_key in hist_data[u_id] and pd.notna(hist_data[u_id][col_key]):
                 return float(hist_data[u_id][col_key])
+            # Priority 2: Session (Uploaded Daily)
             sess = st.session_state.get('daily_data', {})
             if f"Unit {u_id}" in sess and row_key in sess[f"Unit {u_id}"]:
                 return float(sess[f"Unit {u_id}"][row_key])
@@ -371,28 +372,32 @@ with st.sidebar:
 
         for i in range(1, 4):
             u = str(i)
+            # CRITICAL FIX: KEY INCLUDES DATE TO FORCE REFRESH
+            d_key = date_in.strftime('%Y%m%d')
             with st.expander(f"Unit {i}"):
-                gen = st.number_input(f"U{u} Gen", value=val(u, 'Generation (MU)', 'Gen', 8.4), key=f"g{u}")
-                hr = st.number_input(f"U{u} HR", value=val(u, 'Heat Rate (kcal/kWh)', 'HR', 2380.0), key=f"h{u}")
-                vac = st.number_input(f"U{u} Vac", value=val(u, 'Vacuum (kg/cm2)', 'Vacuum', -0.90), step=0.001, format="%.3f", key=f"v{u}")
-                ms = st.number_input(f"U{u} MS", value=val(u, 'MS Temp (C)', 'MS Temp', 535.0), key=f"m{u}")
-                fg = st.number_input(f"U{u} FG", value=val(u, 'FG Temp (C)', 'FG Temp', 135.0), key=f"f{u}")
-                spray = st.number_input(f"U{u} Spray", value=val(u, 'Spray (TPH)', 'Spray', 20.0), key=f"s{u}")
-                sox = st.number_input(f"U{u} SOx", value=val(u, 'SOx (mg/Nm3)', 'SOx', 550.0), key=f"sx{u}")
-                nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}")
-                ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}")
-                ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}")
+                gen = st.number_input(f"U{u} Gen", value=val(u, 'Generation (MU)', 'Gen', 8.4), key=f"g{u}_{d_key}")
+                hr = st.number_input(f"U{u} HR", value=val(u, 'Heat Rate (kcal/kWh)', 'HR', 2380.0), key=f"h{u}_{d_key}")
+                vac = st.number_input(f"U{u} Vac", value=val(u, 'Vacuum (kg/cm2)', 'Vacuum', -0.90), step=0.001, format="%.3f", key=f"v{u}_{d_key}")
+                ms = st.number_input(f"U{u} MS", value=val(u, 'MS Temp (C)', 'MS Temp', 535.0), key=f"m{u}_{d_key}")
+                fg = st.number_input(f"U{u} FG", value=val(u, 'FG Temp (C)', 'FG Temp', 135.0), key=f"f{u}_{d_key}")
+                spray = st.number_input(f"U{u} Spray", value=val(u, 'Spray (TPH)', 'Spray', 20.0), key=f"s{u}_{d_key}")
+                sox = st.number_input(f"U{u} SOx", value=val(u, 'SOx (mg/Nm3)', 'SOx', 550.0), key=f"sx{u}_{d_key}")
+                nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}_{d_key}")
+                
+                ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
+                ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
+                
                 ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
         st.markdown("---")
-        bio_u1 = st.number_input("Bio U1", value=val('1', 'Biomass (Tons)', 'Biomass', 0.0))
-        bio_u2 = st.number_input("Bio U2", value=val('2', 'Biomass (Tons)', 'Biomass', 0.0))
-        bio_u3 = st.number_input("Bio U3", value=val('3', 'Biomass (Tons)', 'Biomass', 0.0))
-        sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
+        bio_u1 = st.number_input("Bio U1", value=val('1', 'Biomass (Tons)', 'Biomass', 0.0), key=f"b1_{d_key}")
+        bio_u2 = st.number_input("Bio U2", value=val('2', 'Biomass (Tons)', 'Biomass', 0.0), key=f"b2_{d_key}")
+        bio_u3 = st.number_input("Bio U3", value=val('3', 'Biomass (Tons)', 'Biomass', 0.0), key=f"b3_{d_key}")
+        sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0), key=f"sol_{d_key}")
         bio_gcv = 3000.0
 
-    # SAFE DOWNLOAD BUTTON LOGIC (Checks if units_data populated)
+    # PRE-FILLED DOWNLOAD LOGIC
     with col_dl1:
         if units_data:
             pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
