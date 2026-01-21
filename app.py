@@ -41,6 +41,7 @@ st.markdown("""
         color: #ffffff;
         font-family: 'Roboto', sans-serif;
     }
+    
     /* CUSTOM TABS */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -60,6 +61,7 @@ st.markdown("""
         background-color: #F59E0B; /* Amber/Orange */
         color: white;
     }
+    
     /* GLASS CARDS */
     .glass-card {
         background: rgba(30, 41, 59, 0.7);
@@ -72,12 +74,14 @@ st.markdown("""
         transition: transform 0.2s ease;
     }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
+    
     /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
+    
     /* BURJ KHALIFA TEXT */
     .burj-text {
         font-family: 'Oswald', sans-serif;
@@ -348,12 +352,16 @@ with st.sidebar:
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
-                # FORCE UTF-8 DECODING to fix 'unsupported encoding' error
-                bytes_data = bulk_file.getvalue()
-                s = str(bytes_data, 'utf-8')
-                data = StringIO(s)
-                df_b = pd.read_csv(data)
-                
+                # UNIVERSAL CSV READER (UTF-8 or LATIN-1)
+                try:
+                    df_b = pd.read_csv(bulk_file)
+                except UnicodeDecodeError:
+                    bulk_file.seek(0)
+                    df_b = pd.read_csv(bulk_file, encoding='latin-1')
+                except Exception:
+                    bulk_file.seek(0)
+                    df_b = pd.read_csv(bulk_file, encoding='cp1252')
+
                 df_b['Date'] = pd.to_datetime(df_b['Date'])
                 if repo:
                     df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
