@@ -81,8 +81,8 @@ def load_history(repo):
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         
-        # CRITICAL FIX 2: Standardize Date
-        df['Date'] = pd.to_datetime(df['Date']).dt.date
+        # CRITICAL FIX 2: Standardize Date to string 'YYYY-MM-DD'
+        df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -290,8 +290,9 @@ with st.sidebar:
     
     hist_data = {}
     if not hist_df.empty:
-        # Filter matching date
-        day_df = hist_df[hist_df['Date'] == date_in]
+        # Filter matching date using string comparison
+        date_in_str = date_in.strftime('%Y-%m-%d')
+        day_df = hist_df[hist_df['Date'] == date_in_str]
         if not day_df.empty:
             st.success(f"Data Found: {date_in}")
             for _, row in day_df.iterrows():
@@ -325,9 +326,8 @@ with st.sidebar:
                     bulk_file.seek(0)
                     df_b = pd.read_csv(bulk_file, encoding='cp1252')
 
-                df_b['Date'] = pd.to_datetime(df_b['Date'])
+                df_b['Date'] = pd.to_datetime(df_b['Date']).dt.strftime('%Y-%m-%d')
                 if repo:
-                    df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
@@ -451,9 +451,11 @@ sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
 green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 
 
+date_in_str = date_in.strftime('%Y-%m-%d')
 curr_month_start = date_in.replace(day=1)
+curr_month_start_str = curr_month_start.strftime('%Y-%m-%d')
 if not hist_df.empty:
-    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] <= date_in)]
+    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start_str) & (hist_df['Date'] <= date_in_str)]
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
     mtd_ash = mtd_df['Ash Util'].sum() if 'Ash Util' in mtd_df.columns else fleet_ash_util
 else:
@@ -584,17 +586,20 @@ with tabs[7]:
     display_info("Historical Performance Analysis", "Double-click legend to isolate Unit.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
-        cutoff = date_in - timedelta(days=7 if filter_opt=="7 Days" else 30)
-        hist_df['Date'] = pd.to_datetime(hist_df['Date']).dt.date
-        filtered_df = hist_df[hist_df['Date'] >= cutoff]
+        days_back = 7 if filter_opt=="7 Days" else 30
+        cutoff = date_in - timedelta(days=days_back)
+        cutoff_str = cutoff.strftime('%Y-%m-%d')
+        date_in_str = date_in.strftime('%Y-%m-%d')
+        filtered_df = hist_df[(hist_df['Date'] >= cutoff_str) & (hist_df['Date'] <= date_in_str)]
+        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
         for u_id in filtered_df['Unit'].unique():
             u_df = filtered_df[filtered_df['Unit'] == u_id]
-            fig.add_trace(go.Scatter(x=u_df['Date'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
-        fleet_trend = filtered_df.groupby('Date')['Profit'].sum().reset_index()
-        fig.add_trace(go.Bar(x=fleet_trend['Date'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
+            fig.add_trace(go.Scatter(x=u_df['Date_dt'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
+        fleet_trend = filtered_df.groupby('Date_dt')['Profit'].sum().reset_index()
+        fig.add_trace(go.Bar(x=fleet_trend['Date_dt'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
         fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", legend=dict(orientation="h", y=1.1))
         fig.update_yaxes(title_text="Heat Rate", secondary_y=False, showgrid=False)
         fig.update_yaxes(title_text="Profit", secondary_y=True, showgrid=False)
