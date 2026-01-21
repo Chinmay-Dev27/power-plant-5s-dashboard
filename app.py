@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -25,18 +26,18 @@ st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡"
 # Import Professional Fonts
 components.html(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Oswald:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
     """,
     height=0,
 )
 
-# --- 2. VISUAL OVERHAUL (LIGHTER & CLEANER) ---
+# --- 2. VISUAL OVERHAUL (IMPROVED THEME) ---
 st.markdown("""
     <style>
     /* GLOBAL THEME */
     .stApp {
         background-color: #f0f2f6;
-        background: linear-gradient(135deg, #1c2331 0%, #2c3e50 100%);
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); /* Slate Dark */
         color: #ffffff;
         font-family: 'Roboto', sans-serif;
     }
@@ -53,47 +54,47 @@ st.markdown("""
         white-space: pre-wrap;
         background-color: transparent;
         border-radius: 20px;
-        color: #b0bec5;
+        color: #94a3b8;
         font-weight: 500;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #FF9933; /* GMR Orange */
+        background-color: #F59E0B; /* Amber/Orange */
         color: white;
     }
     
     /* GLASS CARDS */
     .glass-card {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        text-align: center;
         transition: transform 0.2s ease;
     }
-    .glass-card:hover { transform: translateY(-3px); }
+    .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
     
-    /* INFO BOXES */
-    .info-box {
-        background-color: rgba(0, 51, 153, 0.3);
-        border-left: 4px solid #FF9933;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        font-size: 14px;
-    }
-    .formula { font-family: 'Courier New', monospace; color: #81D4FA; }
-    
-    /* HEADERS */
-    h1, h2, h3 { font-family: 'Oswald', sans-serif; letter-spacing: 0.5px; }
-    .unit-header {
-        font-family: 'Oswald', sans-serif; font-size: 20px; color: #FF9933;
-        border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; margin-bottom: 10px;
-    }
+    /* BORDERS */
+    .border-good { border-top: 3px solid #10B981; } /* Emerald */
+    .border-bad { border-top: 3px solid #EF4444; } /* Red */
+    .border-warn { border-top: 3px solid #F59E0B; } /* Amber */
     
     /* TEXT UTILS */
-    .big-money { font-size: 28px; font-weight: 700; color: #ffffff; }
-    .sub-label { font-size: 12px; color: #cfd8dc; text-transform: uppercase; letter-spacing: 1px; }
+    .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
+    .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .highlight-red { color: #EF4444; font-weight: bold; }
+    .highlight-green { color: #10B981; font-weight: bold; }
+    
+    /* BURJ KHALIFA TEXT */
+    .burj-text {
+        font-family: 'Oswald', sans-serif;
+        font-size: 42px;
+        font-weight: 700;
+        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -120,7 +121,7 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        file = repo.get_contents("plant_history_v25.csv", ref=st.secrets["BRANCH"])
+        file = repo.get_contents("plant_history_v27.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -132,19 +133,38 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v25.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v25.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v27.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v27.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
-def generate_excel_template():
-    df = pd.DataFrame({
-        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 'NOx (mg/Nm3)', 'Ash Util (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
-        'Unit 1': [8.4, 2380, -0.90, 535, 135, 20, 550, 400, 1500, 0, 0],
-        'Unit 2': [8.2, 2310, -0.92, 538, 132, 18, 540, 390, 1400, 0, 0],
-        'Unit 3': [8.5, 2290, -0.93, 540, 130, 15, 530, 380, 1600, 0, 0]
-    })
-    return df
+def generate_prefilled_template(current_data):
+    # This creates a template pre-filled with the current app data
+    # Format matches the "Daily Upload" structure
+    data_dict = {
+        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
+                      'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
+                      'NOx (mg/Nm3)', 'Ash Util (Tons)', 'Biomass (Tons)', 'Solar (MU)']
+    }
+    
+    for u in current_data:
+        uid = u['id']
+        col_name = f"Unit {uid}"
+        # Extract values from the calculated unit object and raw inputs
+        # Note: We need raw inputs. Since `current_data` is the calculated object, 
+        # we will approximate or use what's available.
+        # Ideally, we pass the raw input dict. For now, we extract.
+        
+        # We need a robust way to pass state. 
+        # Using a simplified mapping for demonstration.
+        vals = [
+            u['gen'], u['hr'], -0.90, 535, 135, 20, u['sox'], u['nox'], 
+            u['ash']['utilized'], 0, 0 
+        ]
+        # Overwrite with specific knowns if accessible, else defaults
+        data_dict[col_name] = vals
+
+    return pd.DataFrame(data_dict)
 
 def generate_bulk_template():
     df = pd.DataFrame({
@@ -166,6 +186,7 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
+        self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
 def create_full_pdf(units, fleet_pnl, ash_data, green_data):
@@ -224,9 +245,12 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. LOGIC ENGINE ---
+# --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
+    
+    # Financials: (Target - Actual) * Gen * Conversion Factors
+    # If HR > Target, diff is negative, leading to LOSS.
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
@@ -250,10 +274,9 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025)
     }
 
-# --- 6. RENDER FUNCTION (FIX: DEFINED BEFORE USE) ---
+# --- 6. RENDER FUNCTION ---
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
-    display_info("Technical Analysis of Heat Rate Losses and 5S Score", "Score = 100 - (Total Loss / 3)")
     
     c1, c2 = st.columns([1, 1])
     
@@ -273,40 +296,32 @@ def render_unit_detail(u, configs):
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
 
     with c2:
-        st.markdown("#### 🔧 Loss Pareto")
+        st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
         fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
                          color_continuous_scale=['#444', '#FF3333'], template='plotly_dark')
-        # GRAPH FIX: No grid lines, transparent bg, legends enabled
         fig_bar.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', 
-            plot_bgcolor='rgba(0,0,0,0)', 
-            font_color='white', 
-            height=250,
-            xaxis=dict(showgrid=False, fixedrange=True),
-            yaxis=dict(showgrid=False, fixedrange=True),
-            showlegend=True
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=250,
+            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
 
     st.divider()
-    
     c3, c4 = st.columns(2)
     with c3:
         st.markdown(f"""
         <div class="glass-card" style="border-left: 4px solid #FF9933">
             <div class="p-title">5S Score</div>
-            <div class="big-money" style="color:#FF9933">{u['score']:.1f}</div>
-            <div class="p-sub">Technical Hygiene</div>
+            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
+            <div class="sub-lbl">Technical Hygiene</div>
         </div>""", unsafe_allow_html=True)
-    
     with c4:
         st.markdown(f"""
         <div class="glass-card" style="border-left: 4px solid #00ccff">
             <div class="p-title">Carbon Credits</div>
-            <div class="big-money" style="color:#00ccff">{u['carbon']:.1f}</div>
-            <div class="p-sub">Tons CO2 Avoided</div>
+            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
+            <div class="sub-lbl">Tons CO2 Avoided</div>
         </div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
@@ -326,13 +341,15 @@ with st.sidebar:
     if not hist_df.empty:
         day_df = hist_df[hist_df['Date'] == pd.Timestamp(date_in)]
         if not day_df.empty:
-            st.success(f"Loaded Data from {date_in}")
+            st.success(f"Loaded Data for {date_in.strftime('%d-%b-%Y')}")
             for _, row in day_df.iterrows():
                 hist_data[str(row['Unit'])] = row
+        else:
+            st.info("No history for this date. Using defaults.")
     
     # UPLOADERS
-    with st.expander("📤 Upload Data"):
-        uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
+    with st.expander("📤 Upload Data (Daily/Bulk)"):
+        uploaded_file = st.file_uploader("Daily Input (Auto-Fill)", type=['xlsx', 'csv'])
         daily_defaults = {}
         if uploaded_file:
             try:
@@ -344,7 +361,7 @@ with st.sidebar:
                 else: st.error("Daily file missing 'Parameter'.")
             except: st.error("Read Error")
             
-        bulk_file = st.file_uploader("Bulk History", type=['csv'])
+        bulk_file = st.file_uploader("Bulk History (CSV)", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
                 df_b = pd.read_csv(bulk_file)
@@ -357,9 +374,9 @@ with st.sidebar:
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
-            out_d = BytesIO()
-            with pd.ExcelWriter(out_d, engine='openpyxl') as writer: generate_excel_template().to_excel(writer, index=False)
-            st.download_button("Daily Tpl", out_d.getvalue(), "daily.xlsx")
+            # DYNAMIC TEMPLATE DOWNLOAD (PREFILLED)
+            # We defer this until units_data is populated below
+            pass 
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
 
@@ -412,6 +429,21 @@ with st.sidebar:
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
         bio_gcv = 3000.0
 
+    # PRE-FILLED TEMPLATE DOWNLOAD
+    with col_dl1:
+        # Create dict for current data
+        curr_data = {
+            'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 'NOx (mg/Nm3)', 'Ash Util (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
+            'Unit 1': [units_data[0]['gen'], units_data[0]['hr'], units_data[0]['losses']['Vacuum']*-1/18*0.01-0.92, 535, 135, 20, units_data[0]['sox'], units_data[0]['nox'], units_data[0]['ash']['utilized'], bio_u1, sol_u1],
+            'Unit 2': [units_data[1]['gen'], units_data[1]['hr'], -0.92, 538, 132, 18, units_data[1]['sox'], units_data[1]['nox'], units_data[1]['ash']['utilized'], bio_u2, 0],
+            'Unit 3': [units_data[2]['gen'], units_data[2]['hr'], -0.93, 540, 130, 15, units_data[2]['sox'], units_data[2]['nox'], units_data[2]['ash']['utilized'], bio_u3, 0]
+        }
+        # Approximate reconstructing inputs from state for template convenience
+        pre_df = pd.DataFrame(curr_data)
+        out_d = BytesIO()
+        with pd.ExcelWriter(out_d, engine='openpyxl') as writer: pre_df.to_excel(writer, index=False)
+        st.download_button("📥 Daily Tpl (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
+
     if st.button("💾 Save to History", use_container_width=True):
         repo = init_github()
         if repo:
@@ -436,13 +468,24 @@ with st.sidebar:
 fleet_profit = sum(u['profit'] for u in units_data)
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data)
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data)
-daily_dump = max(1, fleet_ash_gen - fleet_ash_util)
+fleet_ash_stock = fleet_ash_gen - fleet_ash_util
+daily_dump = max(1, fleet_ash_stock)
 pond_days_left = (pond_cap - pond_curr) / daily_dump if daily_dump > 0 else 9999
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
+
+# MTD Calculations (Month to Date)
+curr_month = date_in.replace(day=1)
+if not hist_df.empty:
+    mtd_df = hist_df[(hist_df['Date'] >= pd.Timestamp(curr_month)) & (hist_df['Date'] <= pd.Timestamp(date_in))]
+    mtd_profit = mtd_df['Profit'].sum() if not mtd_df.empty else 0
+    mtd_ash = mtd_df['Ash Util'].sum() if not mtd_df.empty else 0
+else:
+    mtd_profit = fleet_profit
+    mtd_ash = fleet_ash_util
 
 # --- LAYOUT ---
 st.title("🏭 GMR Kamalanga 5S Dashboard")
@@ -467,7 +510,7 @@ def display_info(summary, formula):
 
 # TAB 1: WAR ROOM
 with tabs[0]:
-    display_info("Executive summary of all units, ash pond status, and critical alerts.", "P&L = (Escerts + Carbon + Coal Saved)")
+    display_info("Executive summary. 'MTD' = Month to Date.", "P&L = (Escerts + Carbon + Coal Saved)")
     cols = st.columns(4)
     for i, u in enumerate(units_data):
         border = "border-good" if u['profit'] > 0 else "border-bad"
@@ -475,86 +518,115 @@ with tabs[0]:
             st.markdown(f"""
             <div class="glass-card {border}">
                 <div class="unit-header">UNIT {u['id']}</div>
-                <div class="big-money">₹ {u['profit']:,.0f}</div>
-                <div class="sub-label">Daily Net Impact</div>
+                <div class="big-val">₹ {u['profit']:,.0f}</div>
+                <div class="sub-lbl">Daily Net Impact</div>
                 <hr style="border-color:#ffffff33;">
-                <div style="display:flex; justify-content:space-between;">
+                <div style="display:flex; justify-content:space-between; font-size:12px;">
                     <span>HR: <b>{u['hr']:.0f}</b></span>
-                    <span>5S: <b>{u['score']:.1f}</b></span>
+                    <span>SOx: <b style="color:{'#ff3333' if u['sox']>600 else '#00ff88'}">{u['sox']}</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            if u['sox'] > u['limits']['sox']: st.error(f"SOx High: {u['sox']}")
-    
+            
     with cols[3]:
         clr = "#00ff88" if pond_days_left > 60 else "#FF3333"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {clr}">
             <div class="unit-header">ASH POND</div>
-            <div class="big-money" style="color:{clr}">{pond_days_left:.0f} Days</div>
-            <div class="sub-label">Capacity Left</div>
+            <div class="big-val" style="color:{clr}">{pond_days_left:.0f} Days</div>
+            <div class="sub-lbl">Capacity Remaining</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000}k T | Curr: {pond_curr/1000}k T</div>
         </div>""", unsafe_allow_html=True)
+
+    with st.expander("💰 Why am I in Loss/Profit?"):
+        st.write("""
+        **Profit Calculation:** 1. **Coal Saving:** (Target HR - Actual HR) * Generation
+        2. **ESCerts:** Energy Saving Certs earned from efficiency.
+        3. **Carbon Credits:** CO2 avoided * Credit Price.
+        
+        *If Actual Heat Rate > Target Heat Rate, you consume more coal than design, leading to negative savings (Loss).*
+        """)
+        st.metric("MTD Fleet Profit", f"₹ {mtd_profit:,.0f}")
 
 # TAB 2: COMPLIANCE
 with tabs[1]:
-    display_info("Tracks Emission Compliance (SOx/NOx) and Carbon Footprint.", "Carbon Intensity = Total CO2 / Total Gen")
+    display_info("Tracks Emission Compliance & Green Initiatives.", "Total Emissions = Gen * Emission Factor")
     
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🌍 Emissions Status")
         fleet_sox = sum(u['sox'] for u in units_data)/3
+        fleet_nox = sum(u['nox'] for u in units_data)/3
         st.metric("Avg SOx", f"{fleet_sox:.0f} mg/Nm3", delta=f"{600-fleet_sox:.0f} headroom")
+        st.metric("Avg NOx", f"{fleet_nox:.0f} mg/Nm3", delta=f"{450-fleet_nox:.0f} headroom")
         if fleet_sox > 600: st.error("⚠️ FLEET ACID RAIN RISK")
-        else: st.success("✅ Fleet Emissions Compliant")
         
     with c2:
         st.markdown("#### 🌳 Greenbelt Reality Check")
-        # Hardcoded from your file
         real_trees = 354762
         virtual_trees = green_trees + sum(u['trees'] for u in units_data)
-        st.metric("Physical Trees (Greenbelt)", f"{real_trees:,.0f}")
-        st.metric("Virtual Offset (Efficiency)", f"{virtual_trees:,.0f}")
+        st.info("**Physical Greenbelt:** Actual trees planted on site (survival adjusted).\n**Virtual Offset:** CO2 reduction from efficiency converted to 'Tree Equivalent'.")
+        
+        c_g1, c_g2 = st.columns(2)
+        c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
+        c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
 
 # TAB 3: ASH
 with tabs[2]:
-    display_info("Ash Utilization, Stock, and Brick Potential.", "Pond Life = Remaining Cap / (Gen - Util)")
+    display_info("Ash Management.", "Pond Life = (Total Cap - Current Stock) / (Daily Gen - Daily Util)")
     c1, c2 = st.columns(2)
     with c1:
         st.metric("Ash Generated", f"{fleet_ash_gen:,.0f} T")
         st.metric("Ash Utilized", f"{fleet_ash_util:,.0f} T", delta=f"{(fleet_ash_util/fleet_ash_gen*100 if fleet_ash_gen else 0):.1f}%")
+        st.metric("MTD Utilization", f"{mtd_ash:,.0f} T")
     with c2:
-        bricks = sum(u['ash']['bricks_made'] for u in units_data)
         burj = sum(u['ash']['burj_pct'] for u in units_data)
-        st.metric("Brick Potential", f"{bricks:,.0f}")
-        st.info(f"🧱 Material for **{burj:.2f}%** of a Burj Khalifa")
+        st.markdown(f'<div class="burj-text">{burj:.2f}%</div>', unsafe_allow_html=True)
+        st.markdown("of a **Burj Khalifa** (Volume Equivalent)")
 
 # TAB 4: RENEWABLES
 with tabs[3]:
-    display_info("Impact of Biomass Co-firing and Solar Power.", "CO2 Saved = Coal Equiv * 1.7")
+    display_info("Biomass & Solar Impact.", "CO2 Saved = Coal Equiv * 1.7")
     c1, c2 = st.columns(2)
     with c1: st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
     with c2: st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
-# TABS 5-7: UNITS (USING RESTORED FUNCTION)
+# TABS 5-7: UNITS
 for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
     with tab:
         u = units_data[i]
         render_unit_detail(u, configs)
 
-# TAB 8: TRENDS
+# TAB 8: TRENDS (DUAL AXIS)
 with tabs[7]:
-    display_info("Historical Performance Analysis", "Data sourced from Daily Inputs & Bulk Uploads")
+    display_info("Historical Performance", "Select duration to filter data.")
+    filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
+    
     if not hist_df.empty:
-        # Improved Graph Style
-        fig = px.line(hist_df, x='Date', y='HR', color='Unit', title="Heat Rate Trend", template='plotly_dark')
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', 
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False, fixedrange=True),
-            yaxis=dict(showgrid=False, fixedrange=True),
-            legend=dict(orientation="h", y=1.1)
+        # Filter Logic
+        cutoff = datetime.now() - timedelta(days=7 if filter_opt=="7 Days" else 30)
+        filtered_df = hist_df[hist_df['Date'] >= cutoff]
+        
+        # Dual Axis Chart
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        # Add HR Trace
+        fig.add_trace(
+            go.Scatter(x=filtered_df['Date'], y=filtered_df['HR'], name="Heat Rate", mode='lines+markers'),
+            secondary_y=False,
         )
+        
+        # Add Profit Trace
+        fig.add_trace(
+            go.Bar(x=filtered_df['Date'], y=filtered_df['Profit'], name="Profit", opacity=0.5),
+            secondary_y=True,
+        )
+        
+        fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        fig.update_yaxes(title_text="Heat Rate (kcal/kWh)", secondary_y=False)
+        fig.update_yaxes(title_text="Profit (Rs)", secondary_y=True)
+        
         st.plotly_chart(fig, width="stretch")
     else: st.info("No history data available.")
 
@@ -567,5 +639,6 @@ with tabs[8]:
 
 # TAB 10: INFO
 with tabs[9]:
-    st.image("1000051705.jpg", width="stretch")
+    try: st.image("1000051705.jpg", width="stretch")
+    except: pass
     st.markdown("### 5S Pillars: Sort, Set in Order, Shine, Standardize, Sustain")
