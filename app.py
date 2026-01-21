@@ -26,72 +26,124 @@ st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡"
 # Import Professional Fonts
 components.html(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Oswald:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@500;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     """,
     height=0,
 )
 
-# --- 2. VISUAL OVERHAUL ---
+# --- 2. VISUAL OVERHAUL (CYBER THEME) ---
 st.markdown("""
     <style>
-    /* GLOBAL THEME */
+    /* GLOBAL THEME - Deep Midnight */
     .stApp {
-        background-color: #f0f2f6;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        font-family: 'Roboto', sans-serif;
+        background-color: #050505;
+        background-image: radial-gradient(circle at 50% 0%, #1a1a2e 0%, #000000 100%);
+        color: #e0e0e0;
+        font-family: 'Inter', sans-serif;
     }
     
-    /* CUSTOM TABS */
+    /* MODERN PILL TABS */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 50px;
+        gap: 10px;
+        background-color: rgba(255,255,255,0.03);
+        padding: 8px;
+        border-radius: 60px;
+        border: 1px solid rgba(255,255,255,0.05);
     }
     .stTabs [data-baseweb="tab"] {
-        height: 40px;
+        height: 45px;
         white-space: pre-wrap;
         background-color: transparent;
-        border-radius: 20px;
-        color: #94a3b8;
-        font-weight: 500;
+        border-radius: 30px;
+        color: #888;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 600;
+        font-size: 18px;
+        transition: all 0.3s ease;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #F59E0B; /* Amber/Orange */
+        background: linear-gradient(90deg, #ff8c00, #ff4500); /* GMR Fire Orange */
         color: white;
+        box-shadow: 0 0 15px rgba(255, 69, 0, 0.4);
     }
     
-    /* GLASS CARDS */
+    /* GLASS CARDS - VIBRANT */
     .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        background: rgba(20, 20, 25, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         text-align: center;
-        transition: transform 0.2s ease;
+        transition: transform 0.3s ease, border-color 0.3s ease;
     }
-    .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
+    .glass-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+    }
     
-    /* UTILS */
-    .border-good { border-top: 3px solid #10B981; }
-    .border-bad { border-top: 3px solid #EF4444; }
-    .border-shut { border-top: 3px solid #64748b; }
+    /* NEON BORDERS */
+    .border-good { border-top: 4px solid #00ff9d; box-shadow: 0 -5px 15px rgba(0, 255, 157, 0.1); }
+    .border-bad { border-top: 4px solid #ff2a2a; box-shadow: 0 -5px 15px rgba(255, 42, 42, 0.1); }
+    .border-shut { border-top: 4px solid #555; }
     
-    .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
-    .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
-    .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
+    /* TYPOGRAPHY */
+    .unit-header {
+        font-family: 'Orbitron', sans-serif; 
+        font-size: 20px; 
+        color: #aaa; 
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: 10px;
+    }
+    .big-val { 
+        font-family: 'Rajdhani', sans-serif; 
+        font-size: 32px; 
+        font-weight: 700; 
+        color: white; 
+        text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .sub-lbl { 
+        font-size: 13px; 
+        color: #888; 
+        text-transform: uppercase; 
+        letter-spacing: 1px; 
+        font-weight: 600;
+    }
     
-    /* BURJ KHALIFA TEXT */
+    /* METRICS */
+    div[data-testid="stMetricValue"] {
+        font-family: 'Rajdhani', sans-serif !important;
+        font-size: 28px !important;
+        color: #fff !important;
+    }
+    
+    /* BURJ TEXT */
     .burj-text {
-        font-family: 'Oswald', sans-serif;
-        font-size: 42px;
+        font-family: 'Orbitron', sans-serif;
+        font-size: 48px;
         font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
+        background: linear-gradient(to right, #FFD700, #FFA500);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.3));
+    }
+    
+    /* SECTION HEADER */
+    .section-header {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 24px;
+        background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 30px 0 15px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: 5px;
+        display: inline-block;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -124,9 +176,7 @@ def load_history(repo):
         cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        
-        # CRITICAL FIX: Convert to Pandas Timestamp for robust comparison
-        df['Date'] = pd.to_datetime(df['Date']) 
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -134,7 +184,6 @@ def load_history(repo):
 
 def save_history(repo, df, sha):
     try:
-        # Standardize to string for CSV
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         csv_content = df.to_csv(index=False)
         msg = "Update" if sha else "Init"
@@ -165,9 +214,10 @@ def generate_bulk_template():
     })
     return df
 
-def format_crores(value):
-    val_cr = value / 10000000
-    return f"₹ {val_cr:.2f} Cr"
+# --- FORMATTING HELPER (LACS) ---
+def format_lacs(value):
+    val_lac = value / 100000
+    return f"₹ {val_lac:,.2f} Lac"
 
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
@@ -234,7 +284,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
-    # SHUTDOWN LOGIC
     if gen <= 0 or hr <= 0:
         profit = -1 * (350 * 1000 * 24 * 3) 
         score = 0
@@ -292,10 +341,10 @@ def render_unit_detail(u, configs):
         target = configs[int(u['id'])-1]['target_hr']
         fig = go.Figure(go.Indicator(
             mode = "gauge+number+delta", value = u['hr'],
-            delta = {'reference': target, 'increasing': {'color': "#FF3333"}},
+            delta = {'reference': target, 'increasing': {'color': "#ff2a2a"}},
             gauge = {
                 'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
-                'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
+                'steps': [{'range': [2000, target], 'color': "rgba(0,255,157,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,42,42,0.2)"}],
                 'threshold': {'line': {'color': "#FF3333", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
         ))
@@ -306,7 +355,7 @@ def render_unit_detail(u, configs):
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
         fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
-                         color_continuous_scale=['#444', '#FF3333'], template='plotly_dark')
+                         color_continuous_scale=['#444', '#ff2a2a'], template='plotly_dark')
         fig_bar.update_layout(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=250,
             xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
@@ -317,19 +366,9 @@ def render_unit_detail(u, configs):
     st.divider()
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #FF9933">
-            <div class="p-title">5S Score</div>
-            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
-            <div class="sub-lbl">Technical Hygiene</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #ff8c00"><div class="p-title">5S Score</div><div class="big-val" style="color:#ff8c00">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #00ccff">
-            <div class="p-title">Carbon Credits</div>
-            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
-            <div class="sub-lbl">Tons CO2 Avoided</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00c9ff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00c9ff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
@@ -345,9 +384,8 @@ with st.sidebar:
     
     hist_data = {}
     if not hist_df.empty:
-        # ROBUST DATE COMPARISON: Compare Timestamps directly
-        date_in_ts = pd.Timestamp(date_in)
-        day_df = hist_df[hist_df['Date'] == date_in_ts]
+        date_in_str = date_in.strftime('%Y-%m-%d')
+        day_df = hist_df[hist_df['Date'] == date_in_str]
         if not day_df.empty:
             st.success(f"Data Found: {date_in}")
             for _, row in day_df.iterrows():
@@ -381,9 +419,8 @@ with st.sidebar:
                     bulk_file.seek(0)
                     df_b = pd.read_csv(bulk_file, encoding='cp1252')
 
-                df_b['Date'] = pd.to_datetime(df_b['Date'])
+                df_b['Date'] = pd.to_datetime(df_b['Date']).dt.strftime('%Y-%m-%d')
                 if repo:
-                    df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
@@ -445,6 +482,7 @@ with st.sidebar:
                 nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}_{d_key}")
                 ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
                 ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
+                
                 ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
@@ -454,6 +492,18 @@ with st.sidebar:
         bio_u3 = st.number_input("Bio U3", value=val('3', 'Biomass (Tons)', 'Biomass', 0.0), key=f"b3_{d_key}")
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0), key=f"sol_{d_key}")
         bio_gcv = 3000.0
+
+    with col_dl1:
+        if units_data:
+            pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
+            for u in units_data:
+                idx = int(u['id'])-1
+                inp = u['inputs']
+                vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
+                pre_data_dict[f"Unit {u['id']}"] = vals
+            out_d = BytesIO()
+            pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
+            st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     if st.button("💾 Save to History", use_container_width=True):
         repo = init_github()
@@ -481,15 +531,10 @@ fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-# ASH POND CUMULATIVE LOGIC
-# Fix for TypeError: Use proper timestamp comparison
 pond_days_calc = 365.0
-date_in_ts = pd.Timestamp(date_in)
-
 if not hist_df.empty:
-    hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
-    
-    # Recalculate ash gen
+    date_in_str = date_in.strftime('%Y-%m-%d')
+    hist_sort = hist_df[hist_df['Date'] <= date_in_str].sort_values('Date')
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
     net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
     remaining_cap_tons = pond_cap - net_ash_added
@@ -498,12 +543,11 @@ if not hist_df.empty:
     if daily_net_dump > 0:
         pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
-        pond_days_left = 9999 
+        pond_days_left = 9999
     else:
         pond_days_left = 365
 else:
     pond_days_left = 365
-    remaining_cap_tons = pond_cap
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -512,9 +556,12 @@ green_trees = (bio_co2 + sol_co2) / 0.025
 solar_homes = (sol_u1 * 1000000) / 4
 bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
 
-curr_month_start = pd.Timestamp(date_in.replace(day=1))
+curr_month_start = date_in.replace(day=1)
+date_in_str = date_in.strftime('%Y-%m-%d')
+curr_month_start_str = curr_month_start.strftime('%Y-%m-%d')
+
 if not hist_df.empty:
-    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] <= date_in_ts)]
+    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start_str) & (hist_df['Date'] <= date_in_str)]
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
     mtd_ash = mtd_df['Ash Util'].sum() if 'Ash Util' in mtd_df.columns else fleet_ash_util
 else:
@@ -525,7 +572,7 @@ else:
 st.title("🏭 GMR Kamalanga 5S Dashboard")
 c_top1, c_top2 = st.columns([5, 1])
 with c_top1:
-    st.markdown(f"**Date:** {date_in.strftime('%d-%b-%Y')} | **Fleet P&L:** {format_crores(fleet_profit)}")
+    st.markdown(f"**Date:** {date_in.strftime('%d-%b-%Y')} | **Fleet P&L:** <span style='color:{'#00ff9d' if fleet_profit>0 else '#ff2a2a'}'>{format_lacs(fleet_profit)}</span>", unsafe_allow_html=True)
 with c_top2:
     if st.button("📄 A4 PDF"):
         ash_d = {'gen':fleet_ash_gen, 'util':fleet_ash_util, 'pond_days':pond_days_left, 'bricks':sum(u['ash']['bricks_made'] for u in units_data) if units_data else 0, 'burj_pct':sum(u['ash']['burj_pct'] for u in units_data) if units_data else 0}
@@ -549,7 +596,7 @@ with tabs[0]:
     cols = st.columns(4)
     if units_data:
         for i, u in enumerate(units_data):
-            color = "#00ff88" if u['profit'] > 0 else "#ff3333"
+            color = "#00ff9d" if u['profit'] > 0 else "#ff2a2a"
             border = "border-good" if u['profit'] > 0 else "border-bad"
             if u['status'] == "SHUTDOWN":
                 border = "border-shut"
@@ -559,21 +606,21 @@ with tabs[0]:
                 st.markdown(f"""
                 <div class="glass-card {border}">
                     <div class="unit-header">UNIT {u['id']}</div>
-                    <div class="big-val" style="color:{color}">{format_crores(u['profit'])}</div>
+                    <div class="big-val" style="color:{color}">{format_lacs(u['profit'])}</div>
                     <div class="sub-lbl">{u['status'] if u['status']=='SHUTDOWN' else 'Daily Net Impact'}</div>
                     <hr style="border-color:#ffffff33;">
                     <div style="text-align:left; font-size:12px;">
                         <div style="display:flex; justify-content:space-between;"><span>Target:</span><b>{u['target_hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Actual:</span><b>{u['hr']:.0f}</b></div>
                         <div style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            SOx: <span style="color:{'#ff3333' if u['sox']>600 else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
+                            SOx: <span style="color:{'#ff2a2a' if u['sox']>600 else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     
     with cols[3]:
-        clr = "#00ff88" if pond_days_left > 60 else "#FF3333"
+        clr = "#00ff9d" if pond_days_left > 60 else "#ff2a2a"
         display_days = f"{pond_days_left:.0f}" if pond_days_left < 9999 else "Increasing"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {clr}">
@@ -585,7 +632,7 @@ with tabs[0]:
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
     c_m1, c_m2, c_m3 = st.columns(3)
-    c_m1.metric("MTD Fleet Profit", format_crores(mtd_profit))
+    c_m1.metric("MTD Fleet Profit", format_lacs(mtd_profit))
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash:,.0f} Tons")
     c_m3.info("MTD Data aggregates from 1st of month to selected date.")
 
@@ -629,10 +676,22 @@ with tabs[3]:
     display_info("Impact of Biomass Co-firing and Solar Power.", "CO2 Saved = Coal Equiv * 1.7")
     st.markdown("#### ⚡ Green Power Impact")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
-    with c2: st.metric("Biomass Homes Powered", f"{bio_homes:,.0f}", help="Based on 1.2 kWh per kg biomass")
-    with c3: st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
-    with c4: st.metric("Solar Homes Powered", f"{solar_homes:,.0f}", help="Based on 4 Units/day consumption")
+    with c1: 
+        st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
+    with c2:
+        st.metric("Biomass Homes Powered", f"{bio_homes:,.0f}", help="Based on 1.2 kWh per kg biomass")
+    with c3: 
+        st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
+    with c4:
+        st.metric("Solar Homes Powered", f"{solar_homes:,.0f}", help="Based on 4 Units/day consumption")
+        
+    with st.expander("ℹ️ Calculation Details"):
+        st.write(f"""
+        - **Solar:** 1 MU = 1,000,000 Units. Avg Home Consumption = 4 Units/Day.
+        - **Biomass:** 1 kg Biomass (3000 kcal) ≈ 1.2 kWh.
+        - **CO2:** 0.95 kg/kWh for Solar, Net-Zero for Biomass (Avoided Coal).
+        """)
+        
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
@@ -649,16 +708,14 @@ with tabs[7]:
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
-        cutoff_ts = pd.Timestamp(cutoff)
-        filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
-        
-        # FILTER OUT SHUTDOWNS (HR < 100)
-        filtered_df = filtered_df[filtered_df['HR'] > 100]
-        
-        filtered_df['Date_dt'] = filtered_df['Date'].dt.date
+        cutoff_str = cutoff.strftime('%Y-%m-%d')
+        date_in_str = date_in.strftime('%Y-%m-%d')
+        filtered_df = hist_df[(hist_df['Date'] >= cutoff_str) & (hist_df['Date'] <= date_in_str)]
+        filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
+        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
+        colors = {'1': '#00ccff', '2': '#ff8c00', '3': '#00ff9d'}
         for u_id in filtered_df['Unit'].unique():
             u_df = filtered_df[filtered_df['Unit'] == u_id]
             fig.add_trace(go.Scatter(x=u_df['Date_dt'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
