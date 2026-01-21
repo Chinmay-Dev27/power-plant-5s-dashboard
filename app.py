@@ -80,8 +80,6 @@ st.markdown("""
     .border-bad { border-top: 3px solid #EF4444; }
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
-    .hr-val { font-size: 14px; color: #ddd; margin: 5px 0; }
-    .loss-val { color: #EF4444; font-weight: bold; }
     
     /* BURJ KHALIFA TEXT */
     .burj-text {
@@ -224,7 +222,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. CALCULATION ENGINE ---
+# --- 5. LOGIC ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
@@ -235,7 +233,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
-    # 5S
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
@@ -246,15 +243,16 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     # Ash
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
-    # Utilization sum
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
     ash_stocked = ash_gen - ash_util
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
     
-    # Houses Powered (1 MWh approx 100 homes/day or simple logic: 10kWh/day per home)
-    homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100 # Approx conversion
+    # Houses Powered (Approx: 1MWh = 100 homes/day)
+    # Solar MU * 1000000 kWh / 10 kWh/day = Houses
+    # Biomass Tons * GCV * Efficiency... simplified to coal equiv MWh
+    homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts, "carbon": carbon_tons,
@@ -264,10 +262,60 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
                 "bricks_made": bricks_current, "cem_util": ash_params['util_cem'],
                 "brick_util": ash_params['util_brick'], "burj_pct": burj_pct},
         "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025),
-        "target_hr": TARGET_HR
+        "target_hr": TARGET_HR, "homes_bio": homes_biomass
     }
 
-# --- 6. SIDEBAR & DATA LOADING ---
+# --- 6. RENDER FUNCTION (DEFINED BEFORE USE) ---
+def render_unit_detail(u, configs):
+    st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
+    
+    c1, c2 = st.columns([1, 1])
+    
+    with c1:
+        st.markdown("#### 🏎️ Efficiency Gauge")
+        target = configs[int(u['id'])-1]['target_hr']
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number+delta", value = u['hr'],
+            delta = {'reference': target, 'increasing': {'color': "#FF3333"}},
+            gauge = {
+                'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
+                'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
+                'threshold': {'line': {'color': "#FF3333", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
+            }
+        ))
+        fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
+
+    with c2:
+        st.markdown("#### 🔧 Loss Analysis")
+        loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
+        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
+                         color_continuous_scale=['#444', '#FF3333'], template='plotly_dark')
+        fig_bar.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=250,
+            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
+        )
+        fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
+    st.divider()
+    c3, c4 = st.columns(2)
+    with c3:
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #FF9933">
+            <div class="p-title">5S Score</div>
+            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
+            <div class="sub-lbl">Technical Hygiene</div>
+        </div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #00ccff">
+            <div class="p-title">Carbon Credits</div>
+            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
+            <div class="sub-lbl">Tons CO2 Avoided</div>
+        </div>""", unsafe_allow_html=True)
+
+# --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
     try: st.image("1000051706.png", width="stretch")
     except: st.markdown("## **GMR POWER**") 
@@ -279,29 +327,29 @@ with st.sidebar:
     repo = init_github()
     hist_df, sha = load_history(repo)
     
-    # SESSION STATE FOR PERSISTENCE
-    if 'daily_data' not in st.session_state: st.session_state['daily_data'] = {}
-
-    # LOAD HISTORY OR SESSION
+    # Pre-load history data for date
     hist_data = {}
     if not hist_df.empty:
         day_df = hist_df[hist_df['Date'] == pd.Timestamp(date_in)]
         if not day_df.empty:
-            st.success(f"Loaded {date_in.strftime('%d-%b-%Y')}")
+            st.success(f"Loaded Data for {date_in.strftime('%d-%b-%Y')}")
             for _, row in day_df.iterrows():
                 hist_data[str(row['Unit'])] = row
+        else:
+            st.info("No history for this date. Using defaults.")
     
     # UPLOADERS
     with st.expander("📤 Upload Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
+        daily_defaults = {}
         if uploaded_file:
             try:
                 df_up = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
                 if 'Parameter' in df_up.columns:
                     df_up.set_index('Parameter', inplace=True)
-                    st.session_state['daily_data'] = df_up.to_dict() # SAVE TO SESSION
-                    st.toast("Data Loaded & Held!", icon="💾")
-                else: st.error("Missing 'Parameter' column.")
+                    daily_defaults = df_up.to_dict()
+                    st.toast("Daily Data Applied", icon="✅")
+                else: st.error("Daily file missing 'Parameter'.")
             except: st.error("Read Error")
             
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
@@ -317,8 +365,7 @@ with st.sidebar:
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
-            # PRE-FILLED TEMPLATE
-            # Defer creation until data is ready
+            # PRE-FILLED TEMPLATE - DEFERRED
             pass
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
@@ -342,13 +389,11 @@ with st.sidebar:
                    {'target_hr': t_u2, 'gcv': g_u2, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
                    {'target_hr': t_u3, 'gcv': g_u3, 'limits':{'sox':lim_sox, 'nox':lim_nox}}]
         
-        # Priority: 1. History (if exists for date) 2. Session State (Uploaded) 3. Default
         def val(u_id, row_key, col_key, def_v):
             if u_id in hist_data and col_key in hist_data[u_id] and pd.notna(hist_data[u_id][col_key]):
                 return float(hist_data[u_id][col_key])
-            sess = st.session_state.get('daily_data', {})
-            if f"Unit {u_id}" in sess and row_key in sess[f"Unit {u_id}"]:
-                return float(sess[f"Unit {u_id}"][row_key])
+            if f"Unit {u_id}" in daily_defaults and row_key in daily_defaults[f"Unit {u_id}"]:
+                return float(daily_defaults[f"Unit {u_id}"][row_key])
             return def_v
 
         for i in range(1, 4):
@@ -363,11 +408,10 @@ with st.sidebar:
                 sox = st.number_input(f"U{u} SOx", value=val(u, 'SOx (mg/Nm3)', 'SOx', 550.0), key=f"sx{u}")
                 nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}")
                 
-                # Split Ash Inputs
                 ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}")
                 ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}")
                 
-                ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'util_tons': ash_cem+ash_brk}
+                ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
         st.markdown("---")
@@ -424,23 +468,16 @@ total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
-green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 # Approx
+green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 # Approx 10kWh/day
 
 # MTD Calculations
 curr_month = date_in.replace(day=1)
 if not hist_df.empty:
-    # Ensure date column is datetime
     hist_df['Date'] = pd.to_datetime(hist_df['Date'])
     mtd_df = hist_df[(hist_df['Date'] >= pd.Timestamp(curr_month)) & (hist_df['Date'] <= pd.Timestamp(date_in))]
     
-    # Check if 'Profit' exists (handle legacy data)
-    if 'Profit' in mtd_df.columns:
-        mtd_profit = mtd_df['Profit'].sum()
-    else: mtd_profit = fleet_profit
-    
-    if 'Ash Util' in mtd_df.columns:
-        mtd_ash = mtd_df['Ash Util'].sum()
-    else: mtd_ash = fleet_ash_util
+    mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
+    mtd_ash = mtd_df['Ash Util'].sum() if 'Ash Util' in mtd_df.columns else fleet_ash_util
 else:
     mtd_profit = fleet_profit
     mtd_ash = fleet_ash_util
@@ -565,7 +602,7 @@ with tabs[3]:
         st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
-# TABS 5-7: UNITS (USING RENDER FUNCTION)
+# TABS 5-7: UNITS
 for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
     with tab:
         u = units_data[i]
@@ -596,8 +633,7 @@ with tabs[7]:
                 secondary_y=False,
             )
         
-        # Profit Bar (Avg or Sum? Let's show Fleet Profit Sum per day)
-        # Group by Date for Fleet Profit
+        # Profit Bar (Fleet Profit Sum per day)
         fleet_trend = filtered_df.groupby('Date')['Profit'].sum().reset_index()
         fig.add_trace(
             go.Bar(x=fleet_trend['Date'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'),
