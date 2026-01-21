@@ -354,7 +354,10 @@ with st.sidebar:
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
-                df_b = pd.read_csv(bulk_file)
+                # SAFE ENCODING FIX: Use StringIO + UTF-8 Decoding
+                stringio = StringIO(bulk_file.getvalue().decode("utf-8"))
+                df_b = pd.read_csv(stringio)
+                
                 df_b['Date'] = pd.to_datetime(df_b['Date'])
                 if repo:
                     df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
@@ -425,12 +428,10 @@ with st.sidebar:
         bio_gcv = 3000.0
 
     with col_dl1:
-        # Pre-filled logic fixed here
         pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
         for u in units_data:
             idx = int(u['id'])-1
             inp = u['inputs']
-            # Reconstruct vacuum from losses? No, use raw inputs we stored in calculate_unit
             vals = [
                 u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], 
                 u['sox'], u['nox'], 
