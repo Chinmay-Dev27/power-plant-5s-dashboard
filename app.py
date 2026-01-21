@@ -41,7 +41,6 @@ st.markdown("""
         color: #ffffff;
         font-family: 'Roboto', sans-serif;
     }
-    
     /* CUSTOM TABS */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
@@ -61,7 +60,6 @@ st.markdown("""
         background-color: #F59E0B; /* Amber/Orange */
         color: white;
     }
-    
     /* GLASS CARDS */
     .glass-card {
         background: rgba(30, 41, 59, 0.7);
@@ -74,14 +72,12 @@ st.markdown("""
         transition: transform 0.2s ease;
     }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
-    
     /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    
     /* BURJ KHALIFA TEXT */
     .burj-text {
         font-family: 'Oswald', sans-serif;
@@ -230,7 +226,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
-    # Financials
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
@@ -263,13 +258,12 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
                 "brick_util": ash_params['util_brick'], "burj_pct": burj_pct},
         "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025),
         "target_hr": TARGET_HR, "homes_bio": homes_biomass,
-        "inputs": inputs # Store raw inputs for template pre-fill
+        "inputs": inputs
     }
 
 # --- 6. RENDER FUNCTION ---
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
-    
     c1, c2 = st.columns([1, 1])
     
     with c1:
@@ -354,9 +348,11 @@ with st.sidebar:
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
-                # SAFE ENCODING FIX: Use StringIO + UTF-8 Decoding
-                stringio = StringIO(bulk_file.getvalue().decode("utf-8"))
-                df_b = pd.read_csv(stringio)
+                # FORCE UTF-8 DECODING to fix 'unsupported encoding' error
+                bytes_data = bulk_file.getvalue()
+                s = str(bytes_data, 'utf-8')
+                data = StringIO(s)
+                df_b = pd.read_csv(data)
                 
                 df_b['Date'] = pd.to_datetime(df_b['Date'])
                 if repo:
@@ -372,7 +368,22 @@ with st.sidebar:
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
-            pass
+            pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
+            for u in units_data:
+                idx = int(u['id'])-1
+                inp = u['inputs']
+                vals = [
+                    u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], 
+                    u['sox'], u['nox'], 
+                    u['ash']['cem_util'], u['ash']['brick_util'], 
+                    (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)
+                ]
+                pre_data_dict[f"Unit {u['id']}"] = vals
+
+            out_d = BytesIO()
+            pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
+            st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
+
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
 
@@ -426,23 +437,6 @@ with st.sidebar:
         bio_u3 = st.number_input("Bio U3", value=val('3', 'Biomass (Tons)', 'Biomass', 0.0))
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
         bio_gcv = 3000.0
-
-    with col_dl1:
-        pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
-        for u in units_data:
-            idx = int(u['id'])-1
-            inp = u['inputs']
-            vals = [
-                u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], 
-                u['sox'], u['nox'], 
-                u['ash']['cem_util'], u['ash']['brick_util'], 
-                (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)
-            ]
-            pre_data_dict[f"Unit {u['id']}"] = vals
-
-        out_d = BytesIO()
-        pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
-        st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     if st.button("💾 Save to History", use_container_width=True):
         repo = init_github()
