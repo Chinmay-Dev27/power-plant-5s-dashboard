@@ -74,14 +74,11 @@ def load_history(repo):
     try:
         file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
-        
-        # CRITICAL FIX 1: Enforce Numeric Types
-        cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
-        for c in cols:
-            if c in df.columns:
+        cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar', 'Ash Util', 'Ash Generated']
+        # Helper to safely numeric
+        for c in df.columns:
+            if c in cols or 'Ash' in c:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        
-        # CRITICAL FIX 2: Standardize Date to string 'YYYY-MM-DD'
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         return df, file.sha
     except: 
@@ -115,8 +112,7 @@ def generate_bulk_template():
         'Unit': ['1', '2', '3'],
         'Gen': [8.4, 8.2, 8.5], 'HR': [2380, 2310, 2290], 'Vacuum': [-0.90, -0.92, -0.93], 'MS Temp': [535, 538, 540],
         'FG Temp': [135, 132, 130], 'Spray': [20, 18, 15], 'SOx': [550, 540, 530], 'NOx': [400, 390, 380],
-        'Ash Cement': [1000, 900, 1100], 'Ash Bricks': [500, 500, 500], 'Coal Ash %': [35.0, 35.0, 35.0], 
-        'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
+        'Ash Util': [1500, 1400, 1600], 'Coal Ash %': [35.0, 35.0, 35.0], 'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
     })
     return df
 
@@ -155,8 +151,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
-    
-    # Details Pages
     for u in units:
         pdf.add_page()
         pdf.set_font("Arial", 'B', 14)
@@ -174,8 +168,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.ln(60)
         pdf.set_font("Arial", size=10)
         pdf.cell(0, 10, f"ESCerts: {u['escerts']:.2f} | Carbon Credits: {u['carbon']:.2f}", 0, 1)
-
-    # Environment Page
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Environment & Ash", 0, 1)
@@ -183,26 +175,22 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", size=10)
     pdf.cell(0, 10, f"Ash Gen: {ash_data['gen']:.0f} T | Util: {ash_data['util']:.0f} T", 0, 1)
     pdf.cell(0, 10, f"Solar CO2 Saved: {green_data['sol_co2']:.2f} T", 0, 1)
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
-    
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
-    
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
     l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
     score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
-    
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
@@ -210,9 +198,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
-    
     homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100
-    
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts, "carbon": carbon_tons,
         "score": score, "sox": inputs['sox'], "nox": inputs['nox'],
@@ -229,7 +215,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
     c1, c2 = st.columns([1, 1])
-    
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
         target = configs[int(u['id'])-1]['target_hr']
@@ -244,7 +229,6 @@ def render_unit_detail(u, configs):
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
-
     with c2:
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
@@ -256,23 +240,12 @@ def render_unit_detail(u, configs):
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
-
     st.divider()
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #FF9933">
-            <div class="p-title">5S Score</div>
-            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
-            <div class="sub-lbl">Technical Hygiene</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #00ccff">
-            <div class="p-title">Carbon Credits</div>
-            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
-            <div class="sub-lbl">Tons CO2 Avoided</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
@@ -281,16 +254,13 @@ with st.sidebar:
     st.title("Control Panel")
     
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
-    
-    # Init units_data early to avoid NameError
-    units_data = []
+    units_data = [] # Init
     
     repo = init_github()
     hist_df, sha = load_history(repo)
     
     hist_data = {}
     if not hist_df.empty:
-        # Filter matching date using string comparison
         date_in_str = date_in.strftime('%Y-%m-%d')
         day_df = hist_df[hist_df['Date'] == date_in_str]
         if not day_df.empty:
@@ -361,10 +331,8 @@ with st.sidebar:
                    {'target_hr': t_u3, 'gcv': g_u3, 'limits':{'sox':lim_sox, 'nox':lim_nox}}]
         
         def val(u_id, row_key, col_key, def_v):
-            # Priority 1: History
             if u_id in hist_data and col_key in hist_data[u_id] and pd.notna(hist_data[u_id][col_key]):
                 return float(hist_data[u_id][col_key])
-            # Priority 2: Session (Uploaded Daily)
             sess = st.session_state.get('daily_data', {})
             if f"Unit {u_id}" in sess and row_key in sess[f"Unit {u_id}"]:
                 return float(sess[f"Unit {u_id}"][row_key])
@@ -372,7 +340,6 @@ with st.sidebar:
 
         for i in range(1, 4):
             u = str(i)
-            # CRITICAL FIX: KEY INCLUDES DATE TO FORCE REFRESH
             d_key = date_in.strftime('%Y%m%d')
             with st.expander(f"Unit {i}"):
                 gen = st.number_input(f"U{u} Gen", value=val(u, 'Generation (MU)', 'Gen', 8.4), key=f"g{u}_{d_key}")
@@ -397,19 +364,13 @@ with st.sidebar:
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0), key=f"sol_{d_key}")
         bio_gcv = 3000.0
 
-    # PRE-FILLED DOWNLOAD LOGIC
     with col_dl1:
         if units_data:
             pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
             for u in units_data:
                 idx = int(u['id'])-1
                 inp = u['inputs']
-                vals = [
-                    u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], 
-                    u['sox'], u['nox'], 
-                    u['ash']['cem_util'], u['ash']['brick_util'], 
-                    (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)
-                ]
+                vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
                 pre_data_dict[f"Unit {u['id']}"] = vals
             out_d = BytesIO()
             pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
@@ -421,8 +382,7 @@ with st.sidebar:
             new_rows = []
             for u in units_data:
                 row = {
-                    "Date": date_in.strftime('%Y-%m-%d'),
-                    "Unit": u['id'], "Profit": u['profit'], 
+                    "Date": date_in.strftime('%Y-%m-%d'), "Unit": u['id'], "Profit": u['profit'], 
                     "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen'],
                     "Ash Util": u['ash']['utilized'], "Coal Ash %": coal_ash,
                     "Vacuum": u['losses']['Vacuum'], "MS Temp": u['losses']['MS Temp'], "FG Temp": u['losses']['Flue Gas'], "Spray": u['losses']['Spray'],
@@ -437,13 +397,76 @@ with st.sidebar:
             st.success("Saved!")
         else: st.error("No Repo")
 
-# --- CALCS ---
+# --- CALCS & CUMULATIVE ASH POND ---
 fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
-fleet_ash_stock = fleet_ash_gen - fleet_ash_util
-daily_dump = max(1, fleet_ash_stock)
-pond_days_left = (pond_cap - pond_curr) / daily_dump if daily_dump > 0 else 9999
+
+# ASH POND CUMULATIVE LOGIC
+# Assume start cap = 365 days. 
+# Logic: Calculate NET Ash added/removed up to 'date_in'
+pond_days_calc = 365.0
+if not hist_df.empty:
+    date_in_str = date_in.strftime('%Y-%m-%d')
+    # Filter historical data up to selected date
+    hist_sort = hist_df[hist_df['Date'] <= date_in_str].sort_values('Date')
+    
+    # Calculate Ash Gen and Util per day
+    # Ash Gen was not stored directly, so estimate from 'Gen' and 'Coal Ash %' if missing
+    # But 'Ash Util' is stored.
+    # Recalculate ash gen for history rows
+    # Ash Gen = Gen * HR * 1000 / GCV * Ash% / 100
+    # Use average params if not perfect
+    
+    # Simple cumulative sum of (Ash Util - Ash Gen) / Daily Dump Rate approx
+    # Let's track NET TONS first
+    # Net Tons = Start Cap Tons? No start days.
+    # Let's say 1 day capacity = 1 day dump (e.g. 5000 Tons). 
+    # Start = 365 * 5000 = 1,825,000 Tons capacity available.
+    
+    # Better: Cumulative Net Ash Balance
+    # Net Balance = Sum(Ash Gen - Ash Util)
+    # Remaining Life = (Capacity - Net Balance) / Current Daily Dump
+    
+    # For historical rows:
+    # Ash Gen = (Gen * HR * 1000 / 3600) * (Coal Ash % / 100)
+    # Note: 3600 is approx GCV.
+    hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
+    
+    total_ash_gen_cum = hist_sort['Ash Gen Calc'].sum()
+    total_ash_util_cum = hist_sort['Ash Util'].sum()
+    
+    net_ash_added = total_ash_gen_cum - total_ash_util_cum
+    
+    # Capacity in Tons (User Input: pond_cap e.g. 500,000)
+    # pond_curr is "Current Stock" input. But we want DYNAMIC calculation.
+    # Let's assume pond_curr is the STARTING stock.
+    # Current Stock = Initial Stock + Net Added
+    current_stock_dyn = 0 + net_ash_added # Assuming start from 0 relative to dataset start
+    # Or use pond_curr as the 'current' absolute if user updates it?
+    # Requirement: "make commutative calculation... capacity days should increase/decrease"
+    
+    # Let's use the Pond Cap input as Total Capacity.
+    # Assume we started (at dataset start) with some stock? Or 0?
+    # Let's assume dataset start = "Day 1" of tracking.
+    # Remaining Capacity = Total Cap - Net Added
+    remaining_cap_tons = pond_cap - net_ash_added
+    
+    # Current Daily Dump Rate = Today's (Gen - Util)
+    # If Today's Util > Gen, we are dumping NEGATIVE (Removing from pond)
+    # In that case days left -> Infinity (or we are clearing pond).
+    
+    daily_net_dump = fleet_ash_gen - fleet_ash_util
+    
+    if daily_net_dump > 0:
+        pond_days_left = remaining_cap_tons / daily_net_dump
+    elif daily_net_dump < 0:
+        # We are gaining capacity!
+        pond_days_left = 9999 # "Increasing"
+    else:
+        pond_days_left = 365 # Stable
+else:
+    pond_days_left = 365
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -451,9 +474,10 @@ sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
 green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 
 
-date_in_str = date_in.strftime('%Y-%m-%d')
 curr_month_start = date_in.replace(day=1)
+date_in_str = date_in.strftime('%Y-%m-%d')
 curr_month_start_str = curr_month_start.strftime('%Y-%m-%d')
+
 if not hist_df.empty:
     mtd_df = hist_df[(hist_df['Date'] >= curr_month_start_str) & (hist_df['Date'] <= date_in_str)]
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
@@ -489,34 +513,35 @@ with tabs[0]:
     cols = st.columns(4)
     if units_data:
         for i, u in enumerate(units_data):
+            # PROFIT COLOR LOGIC
+            color = "#00ff88" if u['profit'] > 0 else "#ff3333"
             border = "border-good" if u['profit'] > 0 else "border-bad"
             diff = u['target_hr'] - u['hr']
             with cols[i]:
                 st.markdown(f"""
                 <div class="glass-card {border}">
                     <div class="unit-header">UNIT {u['id']}</div>
-                    <div class="big-val">₹ {u['profit']:,.0f}</div>
+                    <div class="big-val" style="color:{color}">₹ {u['profit']:,.0f}</div>
                     <div class="sub-lbl">Daily Net Impact</div>
                     <hr style="border-color:#ffffff33;">
                     <div style="text-align:left; font-size:12px;">
                         <div style="display:flex; justify-content:space-between;"><span>Target:</span><b>{u['target_hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Actual:</span><b>{u['hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Diff:</span><b style="color:{'#00ff88' if diff>0 else '#ff3333'}">{diff:.0f}</b></div>
-                        <div style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            SOx: <span style="color:{'#ff3333' if u['sox']>600 else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
-                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     
     with cols[3]:
+        # Ash Pond Dynamic
         clr = "#00ff88" if pond_days_left > 60 else "#FF3333"
+        display_days = f"{pond_days_left:.0f}" if pond_days_left < 9999 else "Increasing"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {clr}">
             <div class="unit-header">ASH POND</div>
-            <div class="big-val" style="color:{clr}">{pond_days_left:.0f} Days</div>
-            <div class="sub-lbl">Capacity Remaining</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Curr: {pond_curr/1000:,.0f}k</div>
+            <div class="big-val" style="color:{clr}">{display_days}</div>
+            <div class="sub-lbl">Days Left</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -524,9 +549,6 @@ with tabs[0]:
     c_m1.metric("MTD Fleet Profit", f"₹ {mtd_profit:,.0f}")
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash:,.0f} Tons")
     c_m3.info("MTD Data aggregates from 1st of month to selected date.")
-
-    with st.expander("💰 Why am I in Loss/Profit?"):
-        st.write("Profit/Loss = (Target HR - Actual HR) * Gen * Coal Cost + Benefits. If Actual HR > Target HR, you lose money on excess coal.")
 
 # TAB 2: COMPLIANCE
 with tabs[1]:
@@ -586,20 +608,17 @@ with tabs[7]:
     display_info("Historical Performance Analysis", "Double-click legend to isolate Unit.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
-        days_back = 7 if filter_opt=="7 Days" else 30
-        cutoff = date_in - timedelta(days=days_back)
+        cutoff = date_in - timedelta(days=7 if filter_opt=="7 Days" else 30)
         cutoff_str = cutoff.strftime('%Y-%m-%d')
-        date_in_str = date_in.strftime('%Y-%m-%d')
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_str) & (hist_df['Date'] <= date_in_str)]
-        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
         for u_id in filtered_df['Unit'].unique():
             u_df = filtered_df[filtered_df['Unit'] == u_id]
-            fig.add_trace(go.Scatter(x=u_df['Date_dt'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
-        fleet_trend = filtered_df.groupby('Date_dt')['Profit'].sum().reset_index()
-        fig.add_trace(go.Bar(x=fleet_trend['Date_dt'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
+            fig.add_trace(go.Scatter(x=u_df['Date'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
+        fleet_trend = filtered_df.groupby('Date')['Profit'].sum().reset_index()
+        fig.add_trace(go.Bar(x=fleet_trend['Date'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
         fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", legend=dict(orientation="h", y=1.1))
         fig.update_yaxes(title_text="Heat Rate", secondary_y=False, showgrid=False)
         fig.update_yaxes(title_text="Profit", secondary_y=True, showgrid=False)
