@@ -35,8 +35,8 @@ st.markdown("""
     <style>
     /* GLOBAL THEME */
     .stApp {
-        background-color: #f0f2f6; /* Very light grey fallback */
-        background: linear-gradient(135deg, #1c2331 0%, #2c3e50 100%); /* Corporate Blue-Grey */
+        background-color: #f0f2f6;
+        background: linear-gradient(135deg, #1c2331 0%, #2c3e50 100%);
         color: #ffffff;
         font-family: 'Roboto', sans-serif;
     }
@@ -61,7 +61,7 @@ st.markdown("""
         color: white;
     }
     
-    /* GLASS CARDS - LIGHTER & READABLE */
+    /* GLASS CARDS */
     .glass-card {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.15);
@@ -75,7 +75,7 @@ st.markdown("""
     
     /* INFO BOXES */
     .info-box {
-        background-color: rgba(0, 51, 153, 0.3); /* GMR Blue Tint */
+        background-color: rgba(0, 51, 153, 0.3);
         border-left: 4px solid #FF9933;
         padding: 15px;
         border-radius: 5px;
@@ -250,34 +250,89 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025)
     }
 
-# --- 6. SIDEBAR & DATA LOADING ---
+# --- 6. RENDER FUNCTION (FIX: DEFINED BEFORE USE) ---
+def render_unit_detail(u, configs):
+    st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
+    display_info("Technical Analysis of Heat Rate Losses and 5S Score", "Score = 100 - (Total Loss / 3)")
+    
+    c1, c2 = st.columns([1, 1])
+    
+    with c1:
+        st.markdown("#### 🏎️ Efficiency Gauge")
+        target = configs[int(u['id'])-1]['target_hr']
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number+delta", value = u['hr'],
+            delta = {'reference': target, 'increasing': {'color': "#FF3333"}},
+            gauge = {
+                'axis': {'range': [2000, 2600]}, 'bar': {'color': "#00ccff"},
+                'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
+                'threshold': {'line': {'color': "#FF3333", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
+            }
+        ))
+        fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
+
+    with c2:
+        st.markdown("#### 🔧 Loss Pareto")
+        loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
+        fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
+                         color_continuous_scale=['#444', '#FF3333'], template='plotly_dark')
+        # GRAPH FIX: No grid lines, transparent bg, legends enabled
+        fig_bar.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            font_color='white', 
+            height=250,
+            xaxis=dict(showgrid=False, fixedrange=True),
+            yaxis=dict(showgrid=False, fixedrange=True),
+            showlegend=True
+        )
+        fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
+    st.divider()
+    
+    c3, c4 = st.columns(2)
+    with c3:
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #FF9933">
+            <div class="p-title">5S Score</div>
+            <div class="big-money" style="color:#FF9933">{u['score']:.1f}</div>
+            <div class="p-sub">Technical Hygiene</div>
+        </div>""", unsafe_allow_html=True)
+    
+    with c4:
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #00ccff">
+            <div class="p-title">Carbon Credits</div>
+            <div class="big-money" style="color:#00ccff">{u['carbon']:.1f}</div>
+            <div class="p-sub">Tons CO2 Avoided</div>
+        </div>""", unsafe_allow_html=True)
+
+# --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
     try: st.image("1000051706.png", width="stretch")
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
     
-    # 1. DATE PICKER (GLOBAL) - UPDATED LOGIC
+    # DATE PICKER
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     
-    # 2. CHECK HISTORY FOR DATE
     repo = init_github()
     hist_df, sha = load_history(repo)
     
-    # Helper to get value (Priority: History > Uploaded Excel > Manual Default)
-    # We load history into a dict for quick lookup
+    # Pre-load history data for date
     hist_data = {}
     if not hist_df.empty:
-        # Filter for selected date
         day_df = hist_df[hist_df['Date'] == pd.Timestamp(date_in)]
         if not day_df.empty:
             st.success(f"Loaded Data from {date_in}")
             for _, row in day_df.iterrows():
-                u = str(row['Unit'])
-                hist_data[u] = row
+                hist_data[str(row['Unit'])] = row
     
-    # 3. UPLOADERS
-    with st.expander("📤 Upload Data (Daily/Bulk)"):
-        uploaded_file = st.file_uploader("Daily Input (Excel/CSV)", type=['xlsx', 'csv'])
+    # UPLOADERS
+    with st.expander("📤 Upload Data"):
+        uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
         daily_defaults = {}
         if uploaded_file:
             try:
@@ -286,10 +341,10 @@ with st.sidebar:
                     df_up.set_index('Parameter', inplace=True)
                     daily_defaults = df_up.to_dict()
                     st.toast("Daily Data Applied", icon="✅")
-                else: st.error("Daily file missing 'Parameter' column.")
+                else: st.error("Daily file missing 'Parameter'.")
             except: st.error("Read Error")
             
-        bulk_file = st.file_uploader("Bulk History (CSV)", type=['csv'])
+        bulk_file = st.file_uploader("Bulk History", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
                 df_b = pd.read_csv(bulk_file)
@@ -300,7 +355,6 @@ with st.sidebar:
                     st.success("Bulk Uploaded!")
             except: st.error("Bulk Error")
 
-        # Download Templates
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             out_d = BytesIO()
@@ -311,7 +365,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # 4. INPUTS (POPULATED DYNAMICALLY)
+    # INPUTS
     tab_conf, tab_inp = st.tabs(["⚙️ Config", "📝 Inputs"])
     
     with tab_conf:
@@ -328,7 +382,6 @@ with st.sidebar:
                    {'target_hr': t_u2, 'gcv': g_u2, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
                    {'target_hr': t_u3, 'gcv': g_u3, 'limits':{'sox':lim_sox, 'nox':lim_nox}}]
         
-        # Helper to fetch value with priority: History > Excel Upload > Default
         def val(u_id, row_key, col_key, def_v):
             if u_id in hist_data and col_key in hist_data[u_id] and pd.notna(hist_data[u_id][col_key]):
                 return float(hist_data[u_id][col_key])
@@ -352,7 +405,6 @@ with st.sidebar:
                 ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_tons': ash_u}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
-        # Renewables
         st.markdown("---")
         bio_u1 = st.number_input("Bio U1", value=val('1', 'Biomass (Tons)', 'Biomass', 0.0))
         bio_u2 = st.number_input("Bio U2", value=val('2', 'Biomass (Tons)', 'Biomass', 0.0))
@@ -365,7 +417,6 @@ with st.sidebar:
         if repo:
             new_rows = []
             for u in units_data:
-                # Prepare row with all fields
                 row = {
                     "Date": date_in, "Unit": u['id'], "Profit": u['profit'], 
                     "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen'],
@@ -485,7 +536,7 @@ with tabs[3]:
     with c2: st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
-# TABS 5-7: UNITS
+# TABS 5-7: UNITS (USING RESTORED FUNCTION)
 for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
     with tab:
         u = units_data[i]
@@ -495,7 +546,15 @@ for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
 with tabs[7]:
     display_info("Historical Performance Analysis", "Data sourced from Daily Inputs & Bulk Uploads")
     if not hist_df.empty:
+        # Improved Graph Style
         fig = px.line(hist_df, x='Date', y='HR', color='Unit', title="Heat Rate Trend", template='plotly_dark')
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False, fixedrange=True),
+            yaxis=dict(showgrid=False, fixedrange=True),
+            legend=dict(orientation="h", y=1.1)
+        )
         st.plotly_chart(fig, width="stretch")
     else: st.info("No history data available.")
 
