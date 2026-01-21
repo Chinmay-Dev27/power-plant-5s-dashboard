@@ -118,8 +118,8 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        # Load from v22 schema file or create new
-        file = repo.get_contents("plant_history_v22.csv", ref=st.secrets["BRANCH"])
+        # Load from v24 schema file or create new
+        file = repo.get_contents("plant_history_v24.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
@@ -131,8 +131,8 @@ def save_history(repo, df, sha):
     try:
         csv_content = df.to_csv(index=False)
         msg = "Daily Update" if sha else "Init"
-        if sha: repo.update_file("plant_history_v22.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("plant_history_v22.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v24.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v24.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -296,6 +296,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
+    
     trees_count = abs(carbon_tons / 0.025)
     acres_land = trees_count / 500
     
@@ -303,7 +304,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
-    l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
+    theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 
+    l_unacc = max(0, hr - theo_hr - abs(l_vac))
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
@@ -349,12 +351,16 @@ with st.sidebar:
             else:
                 df_up = pd.read_excel(uploaded_file)
             
-            df_up.set_index('Parameter', inplace=True)
-            defaults = df_up.to_dict()
-            st.success("Data Loaded!")
-        except: st.error("Invalid Format")
+            # Robust Indexing: Check if 'Parameter' exists
+            if 'Parameter' in df_up.columns:
+                df_up.set_index('Parameter', inplace=True)
+                defaults = df_up.to_dict()
+                st.success("Data Loaded!")
+            else:
+                st.error("Error: CSV missing 'Parameter' column. Are you uploading Bulk History file here?")
+        except Exception as e: 
+            st.error(f"Error reading file: {e}")
     
-    # Download Template Button
     template_df = generate_excel_template()
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -374,7 +380,6 @@ with st.sidebar:
                     repo = init_github()
                     if repo:
                         df_curr, sha = load_history(repo)
-                        # Consolidate columns before concat
                         df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
                         save_history(repo, df_comb, sha)
                         st.success(f"Success! {len(df_bulk)} rows added.")
@@ -748,7 +753,6 @@ with tabs[5]:
         if anim_tree: st_lottie(anim_tree, height=100, key="green_tree")
     with col_g_3:
         st.markdown(f"""<div class="glass-card"><div class="big-money" style="color:#FF9933">{green_homes:,.0f}</div><div class="p-sub">Homes Powered</div></div>""", unsafe_allow_html=True)
-        # Safely render sun
         if anim_sun: st_lottie(anim_sun, height=100, key="sun")
 
 # --- TAB 6: INFO ---
@@ -808,11 +812,10 @@ with tabs[9]:
     
     st.divider()
     
-    # NEW PHYSICAL GREENBELT SECTION
+    # NEW PHYSICAL GREENBELT SECTION (DATA FROM UPLOADED SHEET)
     st.markdown("#### 🌳 Physical Greenbelt vs Virtual Offset")
-    
-    # Static data from file or updated via bulk history
-    # File Data: 407,010 Planted, 354,762 Net Available
+    # Using specific data from user's "Plantation data.xlsx" file
+    # Row 3: Planted=407010, Matured=394180, Survival=90%, Net Available=354762
     real_trees_planted = 407010
     real_trees_surviving = 354762
     virtual_trees = green_trees + sum(u['trees'] for u in units_data)
