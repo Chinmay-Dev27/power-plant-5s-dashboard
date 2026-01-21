@@ -34,18 +34,65 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
-    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
-    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
-    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
+    /* GLOBAL THEME */
+    .stApp {
+        background-color: #f0f2f6;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #ffffff;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    /* CUSTOM TABS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(255,255,255,0.05);
+        padding: 10px;
+        border-radius: 50px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 20px;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #F59E0B; /* Amber/Orange */
+        color: white;
+    }
+    
+    /* GLASS CARDS */
+    .glass-card {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
+    
+    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
+    .border-shut { border-top: 3px solid #64748b; }
+    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    /* BURJ KHALIFA TEXT */
+    .burj-text {
+        font-family: 'Oswald', sans-serif;
+        font-size: 42px;
+        font-weight: 700;
+        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -74,12 +121,10 @@ def load_history(repo):
     try:
         file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
-        cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar', 'Ash Util', 'Ash Generated']
-        # Helper to safely numeric
-        for c in df.columns:
-            if c in cols or 'Ash' in c:
-                df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
+        cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
+        for c in cols:
+            if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -112,9 +157,14 @@ def generate_bulk_template():
         'Unit': ['1', '2', '3'],
         'Gen': [8.4, 8.2, 8.5], 'HR': [2380, 2310, 2290], 'Vacuum': [-0.90, -0.92, -0.93], 'MS Temp': [535, 538, 540],
         'FG Temp': [135, 132, 130], 'Spray': [20, 18, 15], 'SOx': [550, 540, 530], 'NOx': [400, 390, 380],
-        'Ash Util': [1500, 1400, 1600], 'Coal Ash %': [35.0, 35.0, 35.0], 'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
+        'Ash Cement': [1000, 900, 1100], 'Ash Bricks': [500, 500, 500], 'Coal Ash %': [35.0, 35.0, 35.0], 
+        'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
     })
     return df
+
+def format_crores(value):
+    val_cr = value / 10000000
+    return f"₹ {val_cr:.2f} Cr"
 
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
@@ -135,8 +185,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
-    
-    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -180,40 +228,67 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 # --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
-    kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
-    escerts = kcal_diff / 10_000_000
-    coal_saved_kg = kcal_diff / COAL_GCV
-    carbon_tons = (coal_saved_kg / 1000) * 1.7
-    profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
-    l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
-    l_ms = max(0, (540 - inputs['ms']) * 1.2)
-    l_fg = max(0, (inputs['fg'] - 130) * 1.5)
-    l_spray = max(0, (inputs['spray'] - 15) * 2.0)
-    l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
-    score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
-    coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
+    
+    # SHUTDOWN LOGIC
+    if gen <= 0 or hr <= 0:
+        # Loss = 350 MW * 24 h * 1000 kW/MW * 3 Rs/kWh = 25,200,000 Rs
+        # 350 MW Unit Capacity hardcoded as per prompt
+        profit = -1 * (350 * 1000 * 24 * 3) 
+        score = 0
+        l_vac = l_ms = l_fg = l_spray = l_unacc = 0
+        carbon_tons = escerts = 0
+        status = "SHUTDOWN"
+    else:
+        status = "RUNNING"
+        kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
+        escerts = kcal_diff / 10_000_000
+        coal_saved_kg = kcal_diff / COAL_GCV
+        carbon_tons = (coal_saved_kg / 1000) * 1.7
+        profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
+        
+        l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
+        l_ms = max(0, (540 - inputs['ms']) * 1.2)
+        l_fg = max(0, (inputs['fg'] - 130) * 1.5)
+        l_spray = max(0, (inputs['spray'] - 15) * 2.0)
+        l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
+        score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
+    
+    coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 and gen > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
     ash_stocked = ash_gen - ash_util
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
-    homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100
+    
+    # Houses Powered (1 MU = 1,000,000 Units. House = 4 units/day)
+    # Solar Homes calculation done in main loop, Biomass here
+    # Biomass Tons -> Approx Heat -> MWh -> Units
+    # GCV 3000. Heat = Mass * 3000 * 1000 kcal. 
+    # MWh = Heat / 860 / 1000. Efficiency 35% ~ 2450 kcal/kWh
+    # Approx: 1 kg biomass (3000kcal) ~ 1.2 kWh electricity
+    bio_units = ash_params.get('biomass', 0) * 1000 * 1.2 
+    homes_bio = bio_units / 4 # 4 units per day
+    
     return {
-        "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts, "carbon": carbon_tons,
+        "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts if status=="RUNNING" else 0, "carbon": carbon_tons if status=="RUNNING" else 0,
         "score": score, "sox": inputs['sox'], "nox": inputs['nox'],
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
         "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
                 "bricks_made": bricks_current, "cem_util": ash_params['util_cem'],
                 "brick_util": ash_params['util_brick'], "burj_pct": burj_pct},
-        "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025),
-        "target_hr": TARGET_HR, "homes_bio": homes_biomass,
-        "inputs": inputs
+        "limits": design_vals['limits'], "trees": abs((carbon_tons if status=="RUNNING" else 0) / 0.025),
+        "target_hr": TARGET_HR, "homes_bio": homes_bio,
+        "inputs": inputs, "status": status
     }
 
 # --- 6. RENDER FUNCTION ---
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
+    if u['status'] == "SHUTDOWN":
+        st.error("🚨 UNIT SHUTDOWN - No Efficiency Analysis Available")
+        return
+
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
@@ -229,6 +304,7 @@ def render_unit_detail(u, configs):
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
+
     with c2:
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
@@ -240,12 +316,23 @@ def render_unit_detail(u, configs):
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
     st.divider()
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #FF9933">
+            <div class="p-title">5S Score</div>
+            <div class="big-val" style="color:#FF9933">{u['score']:.1f}</div>
+            <div class="sub-lbl">Technical Hygiene</div>
+        </div>""", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #00ccff">
+            <div class="p-title">Carbon Credits</div>
+            <div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div>
+            <div class="sub-lbl">Tons CO2 Avoided</div>
+        </div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
@@ -350,7 +437,6 @@ with st.sidebar:
                 spray = st.number_input(f"U{u} Spray", value=val(u, 'Spray (TPH)', 'Spray', 20.0), key=f"s{u}_{d_key}")
                 sox = st.number_input(f"U{u} SOx", value=val(u, 'SOx (mg/Nm3)', 'SOx', 550.0), key=f"sx{u}_{d_key}")
                 nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}_{d_key}")
-                
                 ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
                 ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
                 
@@ -397,74 +483,27 @@ with st.sidebar:
             st.success("Saved!")
         else: st.error("No Repo")
 
-# --- CALCS & CUMULATIVE ASH POND ---
+# --- CALCS ---
 fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-# ASH POND CUMULATIVE LOGIC
-# Assume start cap = 365 days. 
-# Logic: Calculate NET Ash added/removed up to 'date_in'
+# ASH POND CUMULATIVE
 pond_days_calc = 365.0
 if not hist_df.empty:
     date_in_str = date_in.strftime('%Y-%m-%d')
-    # Filter historical data up to selected date
     hist_sort = hist_df[hist_df['Date'] <= date_in_str].sort_values('Date')
-    
-    # Calculate Ash Gen and Util per day
-    # Ash Gen was not stored directly, so estimate from 'Gen' and 'Coal Ash %' if missing
-    # But 'Ash Util' is stored.
-    # Recalculate ash gen for history rows
-    # Ash Gen = Gen * HR * 1000 / GCV * Ash% / 100
-    # Use average params if not perfect
-    
-    # Simple cumulative sum of (Ash Util - Ash Gen) / Daily Dump Rate approx
-    # Let's track NET TONS first
-    # Net Tons = Start Cap Tons? No start days.
-    # Let's say 1 day capacity = 1 day dump (e.g. 5000 Tons). 
-    # Start = 365 * 5000 = 1,825,000 Tons capacity available.
-    
-    # Better: Cumulative Net Ash Balance
-    # Net Balance = Sum(Ash Gen - Ash Util)
-    # Remaining Life = (Capacity - Net Balance) / Current Daily Dump
-    
-    # For historical rows:
-    # Ash Gen = (Gen * HR * 1000 / 3600) * (Coal Ash % / 100)
-    # Note: 3600 is approx GCV.
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    
-    total_ash_gen_cum = hist_sort['Ash Gen Calc'].sum()
-    total_ash_util_cum = hist_sort['Ash Util'].sum()
-    
-    net_ash_added = total_ash_gen_cum - total_ash_util_cum
-    
-    # Capacity in Tons (User Input: pond_cap e.g. 500,000)
-    # pond_curr is "Current Stock" input. But we want DYNAMIC calculation.
-    # Let's assume pond_curr is the STARTING stock.
-    # Current Stock = Initial Stock + Net Added
-    current_stock_dyn = 0 + net_ash_added # Assuming start from 0 relative to dataset start
-    # Or use pond_curr as the 'current' absolute if user updates it?
-    # Requirement: "make commutative calculation... capacity days should increase/decrease"
-    
-    # Let's use the Pond Cap input as Total Capacity.
-    # Assume we started (at dataset start) with some stock? Or 0?
-    # Let's assume dataset start = "Day 1" of tracking.
-    # Remaining Capacity = Total Cap - Net Added
+    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
     remaining_cap_tons = pond_cap - net_ash_added
-    
-    # Current Daily Dump Rate = Today's (Gen - Util)
-    # If Today's Util > Gen, we are dumping NEGATIVE (Removing from pond)
-    # In that case days left -> Infinity (or we are clearing pond).
-    
     daily_net_dump = fleet_ash_gen - fleet_ash_util
     
     if daily_net_dump > 0:
         pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
-        # We are gaining capacity!
-        pond_days_left = 9999 # "Increasing"
+        pond_days_left = 9999
     else:
-        pond_days_left = 365 # Stable
+        pond_days_left = 365
 else:
     pond_days_left = 365
 
@@ -472,7 +511,12 @@ total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
-green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 
+
+# Solar Homes: 1 MU = 1,000,000 Units. House ~ 4 units/day.
+# Solar Homes = (Solar MU * 10^6) / 4
+solar_homes = (sol_u1 * 1000000) / 4
+# Biomass Homes: Sum of unit calculations
+bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
 
 curr_month_start = date_in.replace(day=1)
 date_in_str = date_in.strftime('%Y-%m-%d')
@@ -490,7 +534,7 @@ else:
 st.title("🏭 GMR Kamalanga 5S Dashboard")
 c_top1, c_top2 = st.columns([5, 1])
 with c_top1:
-    st.markdown(f"**Date:** {date_in.strftime('%d-%b-%Y')} | **Fleet P&L:** {'🟢' if fleet_profit>0 else '🔴'} ₹ {fleet_profit:,.0f}")
+    st.markdown(f"**Date:** {date_in.strftime('%d-%b-%Y')} | **Fleet P&L:** {format_crores(fleet_profit)}")
 with c_top2:
     if st.button("📄 A4 PDF"):
         ash_d = {'gen':fleet_ash_gen, 'util':fleet_ash_util, 'pond_days':pond_days_left, 'bricks':sum(u['ash']['bricks_made'] for u in units_data) if units_data else 0, 'burj_pct':sum(u['ash']['burj_pct'] for u in units_data) if units_data else 0}
@@ -509,6 +553,7 @@ def display_info(summary, formula):
 
 # TAB 1: WAR ROOM
 with tabs[0]:
+    display_info("Executive Summary. Profit > 0 (Green) / Loss (Red).", "Shutdown Loss = 350MW * 24h * 1000 * 3 Rs")
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
     if units_data:
@@ -516,41 +561,46 @@ with tabs[0]:
             # PROFIT COLOR LOGIC
             color = "#00ff88" if u['profit'] > 0 else "#ff3333"
             border = "border-good" if u['profit'] > 0 else "border-bad"
+            if u['status'] == "SHUTDOWN":
+                border = "border-shut"
+                color = "#888"
+                
             diff = u['target_hr'] - u['hr']
             with cols[i]:
                 st.markdown(f"""
                 <div class="glass-card {border}">
                     <div class="unit-header">UNIT {u['id']}</div>
-                    <div class="big-val" style="color:{color}">₹ {u['profit']:,.0f}</div>
-                    <div class="sub-lbl">Daily Net Impact</div>
+                    <div class="big-val" style="color:{color}">{format_crores(u['profit'])}</div>
+                    <div class="sub-lbl">{u['status'] if u['status']=='SHUTDOWN' else 'Daily Net Impact'}</div>
                     <hr style="border-color:#ffffff33;">
                     <div style="text-align:left; font-size:12px;">
                         <div style="display:flex; justify-content:space-between;"><span>Target:</span><b>{u['target_hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Actual:</span><b>{u['hr']:.0f}</b></div>
-                        <div style="display:flex; justify-content:space-between;"><span>Diff:</span><b style="color:{'#00ff88' if diff>0 else '#ff3333'}">{diff:.0f}</b></div>
+                        <div style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
+                            SOx: <span style="color:{'#ff3333' if u['sox']>600 else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     
     with cols[3]:
-        # Ash Pond Dynamic
         clr = "#00ff88" if pond_days_left > 60 else "#FF3333"
         display_days = f"{pond_days_left:.0f}" if pond_days_left < 9999 else "Increasing"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {clr}">
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
-            <div class="sub-lbl">Days Left</div>
+            <div class="sub-lbl">Days Left (Cumulative)</div>
             <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
     c_m1, c_m2, c_m3 = st.columns(3)
-    c_m1.metric("MTD Fleet Profit", f"₹ {mtd_profit:,.0f}")
+    c_m1.metric("MTD Fleet Profit", format_crores(mtd_profit))
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash:,.0f} Tons")
     c_m3.info("MTD Data aggregates from 1st of month to selected date.")
 
-# TAB 2: COMPLIANCE
+# TAB 2: COMPLIANCE & SUSTAINABILITY
 with tabs[1]:
     display_info("Tracks Emission Compliance & Green Initiatives.", "Total Emissions = Gen * Emission Factor")
     c1, c2 = st.columns(2)
@@ -588,12 +638,25 @@ with tabs[2]:
 # TAB 4: RENEWABLES
 with tabs[3]:
     display_info("Impact of Biomass Co-firing and Solar Power.", "CO2 Saved = Coal Equiv * 1.7")
-    c1, c2 = st.columns(2)
+    
+    st.markdown("#### ⚡ Green Power Impact")
+    c1, c2, c3, c4 = st.columns(4)
     with c1: 
         st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
-        st.metric("Houses Powered", f"{green_homes:,.0f}")
-    with c2: 
+    with c2:
+        st.metric("Biomass Homes Powered", f"{bio_homes:,.0f}", help="Based on 1.2 kWh per kg biomass")
+    with c3: 
         st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
+    with c4:
+        st.metric("Solar Homes Powered", f"{solar_homes:,.0f}", help="Based on 4 Units/day consumption")
+        
+    with st.expander("ℹ️ Calculation Details"):
+        st.write(f"""
+        - **Solar:** 1 MU = 1,000,000 Units. Avg Home Consumption = 4 Units/Day.
+        - **Biomass:** 1 kg Biomass (3000 kcal) ≈ 1.2 kWh.
+        - **CO2:** 0.95 kg/kWh for Solar, Net-Zero for Biomass (Avoided Coal).
+        """)
+        
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
@@ -608,17 +671,24 @@ with tabs[7]:
     display_info("Historical Performance Analysis", "Double-click legend to isolate Unit.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
-        cutoff = date_in - timedelta(days=7 if filter_opt=="7 Days" else 30)
+        days_back = 7 if filter_opt=="7 Days" else 30
+        cutoff = date_in - timedelta(days=days_back)
         cutoff_str = cutoff.strftime('%Y-%m-%d')
+        date_in_str = date_in.strftime('%Y-%m-%d')
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_str) & (hist_df['Date'] <= date_in_str)]
+        
+        # FILTER OUT ZEROS (SHUTDOWNS) FOR CLEANER GRAPH
+        filtered_df = filtered_df[filtered_df['HR'] > 100]
+        
+        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
         for u_id in filtered_df['Unit'].unique():
             u_df = filtered_df[filtered_df['Unit'] == u_id]
-            fig.add_trace(go.Scatter(x=u_df['Date'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
-        fleet_trend = filtered_df.groupby('Date')['Profit'].sum().reset_index()
-        fig.add_trace(go.Bar(x=fleet_trend['Date'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
+            fig.add_trace(go.Scatter(x=u_df['Date_dt'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
+        fleet_trend = filtered_df.groupby('Date_dt')['Profit'].sum().reset_index()
+        fig.add_trace(go.Bar(x=fleet_trend['Date_dt'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
         fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", legend=dict(orientation="h", y=1.1))
         fig.update_yaxes(title_text="Heat Rate", secondary_y=False, showgrid=False)
         fig.update_yaxes(title_text="Profit", secondary_y=True, showgrid=False)
