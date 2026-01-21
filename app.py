@@ -4,7 +4,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import requests
 from io import StringIO, BytesIO
 from github import Github, Auth
@@ -117,11 +117,9 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
-        # Load v28 or fallback
         file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
-        # CRITICAL FIX: Normalize Dates to Date Objects (remove time)
-        df['Date'] = pd.to_datetime(df['Date']).dt.date 
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -129,7 +127,6 @@ def load_history(repo):
 
 def save_history(repo, df, sha):
     try:
-        # Ensure dates are string format for CSV
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         csv_content = df.to_csv(index=False)
         msg = "Update" if sha else "Init"
@@ -140,10 +137,12 @@ def save_history(repo, df, sha):
 
 def generate_excel_template():
     df = pd.DataFrame({
-        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 'NOx (mg/Nm3)', 'Ash to Cement (Tons)', 'Ash to Bricks (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
-        'Unit 1': [8.4, 2380, -0.90, 535, 135, 20, 550, 400, 1000, 500, 0, 0],
-        'Unit 2': [8.2, 2310, -0.92, 538, 132, 18, 540, 390, 900, 500, 0, 0],
-        'Unit 3': [8.5, 2290, -0.93, 540, 130, 15, 530, 380, 1100, 500, 0, 0]
+        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
+                      'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
+                      'NOx (mg/Nm3)', 'Ash Util (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
+        'Unit 1': [8.4, 2380, -0.90, 535, 135, 20, 550, 400, 1500, 0, 0],
+        'Unit 2': [8.2, 2310, -0.92, 538, 132, 18, 540, 390, 1400, 0, 0],
+        'Unit 3': [8.5, 2290, -0.93, 540, 130, 15, 530, 380, 1600, 0, 0]
     })
     return df
 
@@ -153,8 +152,7 @@ def generate_bulk_template():
         'Unit': ['1', '2', '3'],
         'Gen': [8.4, 8.2, 8.5], 'HR': [2380, 2310, 2290], 'Vacuum': [-0.90, -0.92, -0.93], 'MS Temp': [535, 538, 540],
         'FG Temp': [135, 132, 130], 'Spray': [20, 18, 15], 'SOx': [550, 540, 530], 'NOx': [400, 390, 380],
-        'Ash Cement': [1000, 900, 1100], 'Ash Bricks': [500, 500, 500], 'Coal Ash %': [35.0, 35.0, 35.0], 
-        'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
+        'Ash Util': [1500, 1400, 1600], 'Coal Ash %': [35.0, 35.0, 35.0], 'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
     })
     return df
 
@@ -231,13 +229,10 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
-    # Financials
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
-    # Profit logic: coal savings value + credits. If neg diff, it subtracts.
-    # 4.5 rs/kg coal cost approx
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
     
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
@@ -247,7 +242,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
     score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
     
-    # Ash
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
@@ -255,6 +249,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
+    
+    homes_biomass = (ash_params.get('biomass', 0) * 3000 * 1000 / 3600 / 1000) * 100
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts, "carbon": carbon_tons,
@@ -264,7 +260,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
                 "bricks_made": bricks_current, "cem_util": ash_params['util_cem'],
                 "brick_util": ash_params['util_brick'], "burj_pct": burj_pct},
         "limits": design_vals['limits'], "trees": abs(carbon_tons / 0.025),
-        "target_hr": TARGET_HR
+        "target_hr": TARGET_HR, "homes_bio": homes_biomass
     }
 
 # --- 6. RENDER FUNCTION ---
@@ -322,16 +318,13 @@ with st.sidebar:
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
     
-    # DATE PICKER
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     
     repo = init_github()
     hist_df, sha = load_history(repo)
     
-    # LOAD DATA LOGIC: Check History First
     hist_data = {}
     if not hist_df.empty:
-        # Strict Date Comparison
         day_df = hist_df[hist_df['Date'] == date_in]
         if not day_df.empty:
             st.success(f"Data Found: {date_in}")
@@ -340,7 +333,6 @@ with st.sidebar:
         else:
             st.info("No history. Using inputs.")
     
-    # UPLOADERS
     with st.expander("📤 Upload Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
         daily_defaults = {}
@@ -350,6 +342,7 @@ with st.sidebar:
                 if 'Parameter' in df_up.columns:
                     df_up.set_index('Parameter', inplace=True)
                     daily_defaults = df_up.to_dict()
+                    st.session_state['daily_data'] = daily_defaults
                     st.toast("Daily Data Applied", icon="✅")
                 else: st.error("Missing 'Parameter' column.")
             except: st.error("Read Error")
@@ -360,30 +353,24 @@ with st.sidebar:
                 df_b = pd.read_csv(bulk_file)
                 df_b['Date'] = pd.to_datetime(df_b['Date'])
                 if repo:
-                    # Convert to string to match save format
                     df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
-                    
-                    # Reload current to ensure we don't dup (simple append approach here)
-                    # For robustness, we re-read clean
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
-                    
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
-                    
-                    # Save
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
                     st.success("Bulk Uploaded!")
-                    st.experimental_rerun()
+                    st.rerun() # FIXED: using st.rerun() instead of st.experimental_rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
         col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            pass
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
 
     st.markdown("---")
     
-    # INPUTS
     tab_conf, tab_inp = st.tabs(["⚙️ Config", "📝 Inputs"])
     
     with tab_conf:
@@ -401,12 +388,11 @@ with st.sidebar:
                    {'target_hr': t_u3, 'gcv': g_u3, 'limits':{'sox':lim_sox, 'nox':lim_nox}}]
         
         def val(u_id, row_key, col_key, def_v):
-            # 1. History
             if u_id in hist_data and col_key in hist_data[u_id] and pd.notna(hist_data[u_id][col_key]):
                 return float(hist_data[u_id][col_key])
-            # 2. Daily Upload
-            if f"Unit {u_id}" in daily_defaults and row_key in daily_defaults[f"Unit {u_id}"]:
-                return float(daily_defaults[f"Unit {u_id}"][row_key])
+            sess = st.session_state.get('daily_data', {})
+            if f"Unit {u_id}" in sess and row_key in sess[f"Unit {u_id}"]:
+                return float(sess[f"Unit {u_id}"][row_key])
             return def_v
 
         for i in range(1, 4):
@@ -434,9 +420,7 @@ with st.sidebar:
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
         bio_gcv = 3000.0
 
-    # PRE-FILLED TEMPLATE DOWNLOAD
     with col_dl1:
-        # Generate current data dict
         pre_data = {'Parameter': generate_excel_template()['Parameter']}
         for u in units_data:
             idx = int(u['id'])-1
@@ -455,7 +439,7 @@ with st.sidebar:
             new_rows = []
             for u in units_data:
                 row = {
-                    "Date": date_in.strftime('%Y-%m-%d'), # Store as string
+                    "Date": date_in.strftime('%Y-%m-%d'),
                     "Unit": u['id'], "Profit": u['profit'], 
                     "HR": u['hr'], "SOx": u['sox'], "NOx": u['nox'], "Gen": u['gen'],
                     "Ash Util": u['ash']['utilized'], "Coal Ash %": coal_ash,
@@ -466,8 +450,6 @@ with st.sidebar:
                 }
                 new_rows.append(row)
             df_new = pd.DataFrame(new_rows)
-            # Concat with string dates
-            hist_df['Date'] = pd.to_datetime(hist_df['Date']).dt.strftime('%Y-%m-%d')
             df_comb = pd.concat([hist_df, df_new], ignore_index=True).drop_duplicates(subset=['Date', 'Unit'], keep='last')
             save_history(repo, df_comb, sha)
             st.success("Saved!")
@@ -487,13 +469,9 @@ sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
 green_homes = (total_bio * 3 + sol_u1 * 1000) / 10 
 
-# MTD Calculations
 curr_month_start = date_in.replace(day=1)
 if not hist_df.empty:
-    # Working with date objects
-    # Filter: Date column in hist_df is date object
     mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] <= date_in)]
-    
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
     mtd_ash = mtd_df['Ash Util'].sum() if 'Ash Util' in mtd_df.columns else fleet_ash_util
 else:
@@ -553,6 +531,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{pond_days_left:.0f} Days</div>
             <div class="sub-lbl">Capacity Remaining</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Curr: {pond_curr/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -571,7 +550,9 @@ with tabs[1]:
     with c1:
         st.markdown("#### 🌍 Emissions Status")
         fleet_sox = sum(u['sox'] for u in units_data)/3
+        fleet_nox = sum(u['nox'] for u in units_data)/3
         st.metric("Avg SOx", f"{fleet_sox:.0f} mg/Nm3", delta=f"{600-fleet_sox:.0f} headroom")
+        st.metric("Avg NOx", f"{fleet_nox:.0f} mg/Nm3", delta=f"{450-fleet_nox:.0f} headroom")
         if fleet_sox > 600: st.error("⚠️ FLEET ACID RAIN RISK")
     with c2:
         st.markdown("#### 🌳 Greenbelt Reality Check")
@@ -589,7 +570,7 @@ with tabs[2]:
     with c1:
         st.metric("Ash Generated", f"{fleet_ash_gen:,.0f} T")
         st.metric("Ash Utilized", f"{fleet_ash_util:,.0f} T", delta=f"{(fleet_ash_util/fleet_ash_gen*100 if fleet_ash_gen else 0):.1f}%")
-        # Visual
+        
         ash_breakdown = pd.DataFrame({'Type': ['Cement', 'Bricks'], 'Tons': [sum(u['ash']['cem_util'] for u in units_data), sum(u['ash']['brick_util'] for u in units_data)]})
         fig_pie = px.pie(ash_breakdown, values='Tons', names='Type', hole=0.4, template='plotly_dark')
         fig_pie.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)')
@@ -622,10 +603,8 @@ with tabs[7]:
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         cutoff = date_in - timedelta(days=7 if filter_opt=="7 Days" else 30)
-        # Ensure date type
         hist_df['Date'] = pd.to_datetime(hist_df['Date']).dt.date
         filtered_df = hist_df[hist_df['Date'] >= cutoff]
-        
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
