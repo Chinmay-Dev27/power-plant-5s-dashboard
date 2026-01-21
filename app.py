@@ -136,7 +136,6 @@ def save_history(repo, df, sha):
     except: return False
 
 def generate_excel_template():
-    # FIXED: Header list now has 12 items to match data structure
     df = pd.DataFrame({
         'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
                       'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
@@ -425,52 +424,22 @@ with st.sidebar:
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
         bio_gcv = 3000.0
 
-    # PRE-FILLED DOWNLOAD LOGIC
     with col_dl1:
-        # Construct pre-filled DataFrame
+        # Pre-filled logic fixed here
         pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
         for u in units_data:
             idx = int(u['id'])-1
-            # Retrieve raw inputs from calculation dict
-            raw = u['inputs'] if 'inputs' in u else {} # Safety check although we added it
-            # Reconstruct vacuum from losses if raw input not preserved in `calculate_unit`?
-            # Wait, calculate_unit in this version does not return raw 'inputs' dict. I will fix that above.
-            # FIX: Added 'inputs': inputs to return dict in calculate_unit above.
-            
+            inp = u['inputs']
+            # Reconstruct vacuum from losses? No, use raw inputs we stored in calculate_unit
             vals = [
-                u['gen'], u['hr'], u['losses']['Vacuum']*-1/18*0.01-0.92, # Approx vac back-calc or use stored?
-                # Actually, best to use the sidebar variables directly if possible, but they are in loop.
-                # Let's use the 'inputs' stored in units_data.
-                # Check calculate_unit return: "inputs": inputs  <-- Added this in step 5
-                
-                # Using the stored inputs directly is cleaner:
-                # But 'inputs' in calculate_unit was the dict passed in. 
-                # Let's use u['gen'], u['hr'] and u['inputs']['vac'] etc.
-                
-                # However, calculate_unit return dict structure in Step 5:
-                # "inputs" is not in the return dict in the code block above initially.
-                # I added it in the fix.
-                
-                # Let's verify Step 5 code block...
-                # It has: "target_hr": TARGET_HR, "homes_bio": homes_biomass
-                # It MISSES "inputs": inputs. 
-                # I WILL ADD IT NOW IN THE FINAL CODE BLOCK BELOW.
-                
-                u['gen'], u['hr'], -0.92, 535, 135, 20, u['sox'], u['nox'], # Fallbacks if extraction fails
+                u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], 
+                u['sox'], u['nox'], 
                 u['ash']['cem_util'], u['ash']['brick_util'], 
                 (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)
             ]
-            
-            # Better approach: 
-            # We have the loop variables available here (gen, hr, vac, etc) are overwritten.
-            # We can't access them.
-            # We rely on what `calculate_unit` returns.
-            # So I will ensure `calculate_unit` returns the raw inputs.
-            
             pre_data_dict[f"Unit {u['id']}"] = vals
 
         out_d = BytesIO()
-        # Direct DF to Excel to avoid context manager issues in some envs
         pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
         st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
