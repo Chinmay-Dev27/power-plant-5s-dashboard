@@ -124,7 +124,9 @@ def load_history(repo):
         cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        df['Date'] = pd.to_datetime(df['Date']).dt.date
+        
+        # CRITICAL FIX: Convert to Pandas Timestamp for robust comparison
+        df['Date'] = pd.to_datetime(df['Date']) 
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -132,6 +134,7 @@ def load_history(repo):
 
 def save_history(repo, df, sha):
     try:
+        # Standardize to string for CSV
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         csv_content = df.to_csv(index=False)
         msg = "Update" if sha else "Init"
@@ -185,6 +188,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
+    
+    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -231,8 +236,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     
     # SHUTDOWN LOGIC
     if gen <= 0 or hr <= 0:
-        # Loss = 350 MW * 24 h * 1000 kW/MW * 3 Rs/kWh = 25,200,000 Rs
-        # 350 MW Unit Capacity hardcoded as per prompt
         profit = -1 * (350 * 1000 * 24 * 3) 
         score = 0
         l_vac = l_ms = l_fg = l_spray = l_unacc = 0
@@ -261,14 +264,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
     
-    # Houses Powered (1 MU = 1,000,000 Units. House = 4 units/day)
-    # Solar Homes calculation done in main loop, Biomass here
-    # Biomass Tons -> Approx Heat -> MWh -> Units
-    # GCV 3000. Heat = Mass * 3000 * 1000 kcal. 
-    # MWh = Heat / 860 / 1000. Efficiency 35% ~ 2450 kcal/kWh
-    # Approx: 1 kg biomass (3000kcal) ~ 1.2 kWh electricity
     bio_units = ash_params.get('biomass', 0) * 1000 * 1.2 
-    homes_bio = bio_units / 4 # 4 units per day
+    homes_bio = bio_units / 4 
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts if status=="RUNNING" else 0, "carbon": carbon_tons if status=="RUNNING" else 0,
@@ -348,8 +345,9 @@ with st.sidebar:
     
     hist_data = {}
     if not hist_df.empty:
-        date_in_str = date_in.strftime('%Y-%m-%d')
-        day_df = hist_df[hist_df['Date'] == date_in_str]
+        # ROBUST DATE COMPARISON: Compare Timestamps directly
+        date_in_ts = pd.Timestamp(date_in)
+        day_df = hist_df[hist_df['Date'] == date_in_ts]
         if not day_df.empty:
             st.success(f"Data Found: {date_in}")
             for _, row in day_df.iterrows():
@@ -383,8 +381,9 @@ with st.sidebar:
                     bulk_file.seek(0)
                     df_b = pd.read_csv(bulk_file, encoding='cp1252')
 
-                df_b['Date'] = pd.to_datetime(df_b['Date']).dt.strftime('%Y-%m-%d')
+                df_b['Date'] = pd.to_datetime(df_b['Date'])
                 if repo:
+                    df_b['Date'] = df_b['Date'].dt.strftime('%Y-%m-%d')
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
@@ -396,9 +395,16 @@ with st.sidebar:
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
-            pass
-        with col_dl2:
-            st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
+            if units_data:
+                pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
+                for u in units_data:
+                    idx = int(u['id'])-1
+                    inp = u['inputs']
+                    vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
+                    pre_data_dict[f"Unit {u['id']}"] = vals
+                out_d = BytesIO()
+                pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
+                st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     st.markdown("---")
     
@@ -439,7 +445,6 @@ with st.sidebar:
                 nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}_{d_key}")
                 ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
                 ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
-                
                 ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
@@ -449,18 +454,6 @@ with st.sidebar:
         bio_u3 = st.number_input("Bio U3", value=val('3', 'Biomass (Tons)', 'Biomass', 0.0), key=f"b3_{d_key}")
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0), key=f"sol_{d_key}")
         bio_gcv = 3000.0
-
-    with col_dl1:
-        if units_data:
-            pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
-            for u in units_data:
-                idx = int(u['id'])-1
-                inp = u['inputs']
-                vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
-                pre_data_dict[f"Unit {u['id']}"] = vals
-            out_d = BytesIO()
-            pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
-            st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     if st.button("💾 Save to History", use_container_width=True):
         repo = init_github()
@@ -483,16 +476,20 @@ with st.sidebar:
             st.success("Saved!")
         else: st.error("No Repo")
 
-# --- CALCS ---
+# --- CALCS & CUMULATIVE ASH POND ---
 fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-# ASH POND CUMULATIVE
+# ASH POND CUMULATIVE LOGIC
+# Fix for TypeError: Use proper timestamp comparison
 pond_days_calc = 365.0
+date_in_ts = pd.Timestamp(date_in)
+
 if not hist_df.empty:
-    date_in_str = date_in.strftime('%Y-%m-%d')
-    hist_sort = hist_df[hist_df['Date'] <= date_in_str].sort_values('Date')
+    hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
+    
+    # Recalculate ash gen
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
     net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
     remaining_cap_tons = pond_cap - net_ash_added
@@ -501,29 +498,23 @@ if not hist_df.empty:
     if daily_net_dump > 0:
         pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
-        pond_days_left = 9999
+        pond_days_left = 9999 
     else:
         pond_days_left = 365
 else:
     pond_days_left = 365
+    remaining_cap_tons = pond_cap
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
 green_trees = (bio_co2 + sol_co2) / 0.025
-
-# Solar Homes: 1 MU = 1,000,000 Units. House ~ 4 units/day.
-# Solar Homes = (Solar MU * 10^6) / 4
 solar_homes = (sol_u1 * 1000000) / 4
-# Biomass Homes: Sum of unit calculations
 bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
 
-curr_month_start = date_in.replace(day=1)
-date_in_str = date_in.strftime('%Y-%m-%d')
-curr_month_start_str = curr_month_start.strftime('%Y-%m-%d')
-
+curr_month_start = pd.Timestamp(date_in.replace(day=1))
 if not hist_df.empty:
-    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start_str) & (hist_df['Date'] <= date_in_str)]
+    mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] <= date_in_ts)]
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
     mtd_ash = mtd_df['Ash Util'].sum() if 'Ash Util' in mtd_df.columns else fleet_ash_util
 else:
@@ -558,13 +549,11 @@ with tabs[0]:
     cols = st.columns(4)
     if units_data:
         for i, u in enumerate(units_data):
-            # PROFIT COLOR LOGIC
             color = "#00ff88" if u['profit'] > 0 else "#ff3333"
             border = "border-good" if u['profit'] > 0 else "border-bad"
             if u['status'] == "SHUTDOWN":
                 border = "border-shut"
                 color = "#888"
-                
             diff = u['target_hr'] - u['hr']
             with cols[i]:
                 st.markdown(f"""
@@ -600,7 +589,7 @@ with tabs[0]:
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash:,.0f} Tons")
     c_m3.info("MTD Data aggregates from 1st of month to selected date.")
 
-# TAB 2: COMPLIANCE & SUSTAINABILITY
+# TAB 2: COMPLIANCE
 with tabs[1]:
     display_info("Tracks Emission Compliance & Green Initiatives.", "Total Emissions = Gen * Emission Factor")
     c1, c2 = st.columns(2)
@@ -638,25 +627,12 @@ with tabs[2]:
 # TAB 4: RENEWABLES
 with tabs[3]:
     display_info("Impact of Biomass Co-firing and Solar Power.", "CO2 Saved = Coal Equiv * 1.7")
-    
     st.markdown("#### ⚡ Green Power Impact")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: 
-        st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
-    with c2:
-        st.metric("Biomass Homes Powered", f"{bio_homes:,.0f}", help="Based on 1.2 kWh per kg biomass")
-    with c3: 
-        st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
-    with c4:
-        st.metric("Solar Homes Powered", f"{solar_homes:,.0f}", help="Based on 4 Units/day consumption")
-        
-    with st.expander("ℹ️ Calculation Details"):
-        st.write(f"""
-        - **Solar:** 1 MU = 1,000,000 Units. Avg Home Consumption = 4 Units/Day.
-        - **Biomass:** 1 kg Biomass (3000 kcal) ≈ 1.2 kWh.
-        - **CO2:** 0.95 kg/kWh for Solar, Net-Zero for Biomass (Avoided Coal).
-        """)
-        
+    with c1: st.metric("Biomass CO2 Saved", f"{bio_co2:.2f} T")
+    with c2: st.metric("Biomass Homes Powered", f"{bio_homes:,.0f}", help="Based on 1.2 kWh per kg biomass")
+    with c3: st.metric("Solar CO2 Saved", f"{sol_co2:.2f} T")
+    with c4: st.metric("Solar Homes Powered", f"{solar_homes:,.0f}", help="Based on 4 Units/day consumption")
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
@@ -673,14 +649,13 @@ with tabs[7]:
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
-        cutoff_str = cutoff.strftime('%Y-%m-%d')
-        date_in_str = date_in.strftime('%Y-%m-%d')
-        filtered_df = hist_df[(hist_df['Date'] >= cutoff_str) & (hist_df['Date'] <= date_in_str)]
+        cutoff_ts = pd.Timestamp(cutoff)
+        filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
         
-        # FILTER OUT ZEROS (SHUTDOWNS) FOR CLEANER GRAPH
+        # FILTER OUT SHUTDOWNS (HR < 100)
         filtered_df = filtered_df[filtered_df['HR'] > 100]
         
-        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
+        filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff9933', '3': '#00ff88'}
