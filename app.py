@@ -229,6 +229,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
+    # Financials
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
@@ -266,6 +267,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 # --- 6. RENDER FUNCTION ---
 def render_unit_detail(u, configs):
     st.markdown(f"### 🔍 Unit {u['id']} Deep Dive")
+    
     c1, c2 = st.columns([1, 1])
     
     with c1:
@@ -318,21 +320,24 @@ with st.sidebar:
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
     
+    # DATE PICKER
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     
     repo = init_github()
     hist_df, sha = load_history(repo)
     
+    # Pre-load history data for date
     hist_data = {}
     if not hist_df.empty:
         day_df = hist_df[hist_df['Date'] == date_in]
         if not day_df.empty:
-            st.success(f"Data Found: {date_in}")
+            st.success(f"Loaded Data for {date_in.strftime('%d-%b-%Y')}")
             for _, row in day_df.iterrows():
                 hist_data[str(row['Unit'])] = row
         else:
-            st.info("No history. Using inputs.")
+            st.info("No history for this date. Using defaults.")
     
+    # UPLOADERS
     with st.expander("📤 Upload Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
         daily_defaults = {}
@@ -360,17 +365,20 @@ with st.sidebar:
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
                     st.success("Bulk Uploaded!")
-                    st.rerun() # FIXED: using st.rerun() instead of st.experimental_rerun()
+                    st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
+            # PRE-FILLED DOWNLOAD LOGIC
+            # Defer execution until units_data is populated
             pass
         with col_dl2:
             st.download_button("Bulk Tpl", generate_bulk_template().to_csv(index=False), "bulk.csv")
 
     st.markdown("---")
     
+    # INPUTS
     tab_conf, tab_inp = st.tabs(["⚙️ Config", "📝 Inputs"])
     
     with tab_conf:
@@ -420,6 +428,7 @@ with st.sidebar:
         sol_u1 = st.number_input("Solar", value=val('1', 'Solar (MU)', 'Solar', 0.0))
         bio_gcv = 3000.0
 
+    # PRE-FILLED DOWNLOAD LOGIC
     with col_dl1:
         pre_data = {'Parameter': generate_excel_template()['Parameter']}
         for u in units_data:
@@ -430,7 +439,8 @@ with st.sidebar:
                 (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)
             ]
         out_d = BytesIO()
-        with pd.ExcelWriter(out_d, engine='openpyxl') as writer: pd.DataFrame(pre_data).to_excel(writer, index=False)
+        # Direct DF to Excel to avoid context manager issues in some envs
+        pd.DataFrame(pre_data).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
         st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     if st.button("💾 Save to History", use_container_width=True):
@@ -550,9 +560,7 @@ with tabs[1]:
     with c1:
         st.markdown("#### 🌍 Emissions Status")
         fleet_sox = sum(u['sox'] for u in units_data)/3
-        fleet_nox = sum(u['nox'] for u in units_data)/3
         st.metric("Avg SOx", f"{fleet_sox:.0f} mg/Nm3", delta=f"{600-fleet_sox:.0f} headroom")
-        st.metric("Avg NOx", f"{fleet_nox:.0f} mg/Nm3", delta=f"{450-fleet_nox:.0f} headroom")
         if fleet_sox > 600: st.error("⚠️ FLEET ACID RAIN RISK")
     with c2:
         st.markdown("#### 🌳 Greenbelt Reality Check")
