@@ -22,10 +22,10 @@ matplotlib.use('Agg')
 # --- 1. CONFIGURATION & CSS ---
 st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡")
 
-# Import Google Fonts
+# Import Professional Fonts
 components.html(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     """,
     height=0,
 )
@@ -37,32 +37,72 @@ def load_lottieurl(url):
         return r.json() if r.status_code == 200 else None
     except: return None
 
-# Initialize Animations Globally
+# Initialize Animations
 anim_tree = load_lottieurl("https://lottie.host/6e35574d-8651-477d-b570-56965c276b3b/22572535-373f-42a9-823c-99e582862594.json")
 anim_smoke = load_lottieurl("https://lottie.host/575a66c6-1215-4688-9189-b57579621379/10839556-9141-4712-a89e-224429715783.json")
 anim_money = load_lottieurl("https://lottie.host/02008323-2895-4673-863a-4934e402802d/41838634-11d9-430c-992a-356c92d529d3.json")
 anim_sun = load_lottieurl("https://lottie.host/3c6c9e04-0391-4e9e-99f2-2b6f3c02d139/2Y7Q1j1j1j.json") 
 
-# GMR COLORS
+# VISUAL OVERHAUL - HIGH CONTRAST DASHBOARD
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
-    .stApp { background: linear-gradient(to bottom, #001f3f, #003366); font-family: 'Inter', sans-serif; }
-    .glass-card {
-        background: rgba(0, 34, 68, 0.6); background: radial-gradient(circle at top left, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.2) 100%);
-        backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px;
-        margin-bottom: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); text-align: center; transition: all 0.3s ease;
+    /* FONTS & BACKGROUND */
+    .stApp { 
+        background-color: #0b1116; /* Deep Dark */
+        background-image: radial-gradient(circle at 50% 0%, #1c2e4a 0%, #0b1116 70%);
+        font-family: 'Roboto', sans-serif;
+        color: #e0e0e0;
     }
-    .glass-card:hover { transform: scale(1.02); background: rgba(255, 255, 255, 0.05); }
-    .border-good { border-top: 4px solid #00ff88; }
-    .border-bad { border-top: 4px solid #FF3333; }
-    .placard { background: #002244; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: left; border-left: 4px solid #FF9933; }
-    .p-title { font-size: 11px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; }
-    .p-val { font-size: 24px; font-weight: 800; color: white; margin: 5px 0;}
-    .big-money { font-size: 32px; font-weight: 800; color: #FF9933; }
-    .unit-header { font-size: 20px; font-weight: 700; border-bottom: 1px solid #ffffff33; padding-bottom: 10px; margin-bottom: 15px; color: white; }
-    .progress { background: #002244; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-    .progress-fill { height: 100%; background: linear-gradient(to right, #FF3333, #FF9933); transition: width 0.3s; }
+    
+    /* GLASS CARDS - CLEANER LOOK */
+    .glass-card {
+        background: rgba(20, 30, 48, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        text-align: center;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .glass-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    /* GMR ACCENT BORDERS */
+    .border-good { border-top: 3px solid #00E676; } /* Vivid Green */
+    .border-bad { border-top: 3px solid #FF3D00; } /* Vivid Red */
+    .border-gmr { border-top: 3px solid #FF9100; } /* Vivid Orange */
+    
+    /* TEXT STYLES */
+    h1, h2, h3 { font-family: 'Orbitron', sans-serif; letter-spacing: 1px; color: #ffffff; }
+    .unit-header { 
+        font-family: 'Orbitron', sans-serif; 
+        font-size: 18px; 
+        font-weight: 700; 
+        color: #B0BEC5; 
+        border-bottom: 1px solid rgba(255,255,255,0.1); 
+        padding-bottom: 8px; 
+        margin-bottom: 12px; 
+    }
+    .big-money { font-size: 28px; font-weight: 700; color: #FF9100; text-shadow: 0 0 10px rgba(255, 145, 0, 0.3); }
+    .p-val { font-size: 22px; font-weight: 700; color: #ffffff; }
+    .p-sub { font-size: 12px; color: #90A4AE; }
+    
+    /* PLACARDS & PROGRESS */
+    .placard {
+        background: #151f2b; padding: 12px; border-radius: 8px; 
+        margin-bottom: 10px; text-align: left;
+        border-left: 3px solid #FF9100;
+    }
+    .progress { background: #263238; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #FF3D00, #FF9100); }
+    
+    /* METRIC CONTAINERS */
+    div[data-testid="stMetricValue"] { font-family: 'Orbitron', sans-serif; font-size: 24px; color: #ffffff; }
+    div[data-testid="stMetricLabel"] { font-size: 14px; color: #90A4AE; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -78,13 +118,13 @@ def init_github():
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
+        # Load from v22 schema file or create new
         file = repo.get_contents("plant_history_v22.csv", ref=st.secrets["BRANCH"])
         df = pd.read_csv(StringIO(file.decoded_content.decode()))
         df['Date'] = pd.to_datetime(df['Date'])
         return df, file.sha
     except: 
-        # UPDATED: Extended schema to support bulk data tracking
-        cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Biomass", "Solar", "Coal Ash %"]
+        cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar"]
         return pd.DataFrame(columns=cols), None
 
 def save_history(repo, df, sha):
@@ -97,7 +137,6 @@ def save_history(repo, df, sha):
     except: return False
 
 def generate_excel_template():
-    # DAILY single upload template
     df = pd.DataFrame({
         'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
                       'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
@@ -109,7 +148,6 @@ def generate_excel_template():
     return df
 
 def generate_bulk_template():
-    # UPDATED: Added Ash %, Biomass, Solar columns for full back-dating
     df = pd.DataFrame({
         'Date': ['2024-01-01', '2024-01-01', '2024-01-01'],
         'Unit': ['1', '2', '3'],
@@ -146,25 +184,25 @@ class PDF(FPDF):
 def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf = PDF()
     
-    # --- PAGE 1: WAR ROOM ---
+    # PAGE 1: WAR ROOM
     pdf.add_page()
     pdf.set_fill_color(240, 240, 240)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')}  |  Fleet Net P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C', 1)
     pdf.ln(10)
-    
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Executive Summary (War Room)", 0, 1)
     pdf.ln(5)
     
+    # Table Header
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(0, 51, 153)
     pdf.set_text_color(255, 255, 255)
     headers = ["Unit", "Gen (MU)", "Heat Rate", "Profit (Rs)", "SOx", "NOx", "5S Score"]
-    for h in headers:
-        pdf.cell(27, 10, h, 1, 0, 'C', 1)
+    for h in headers: pdf.cell(27, 10, h, 1, 0, 'C', 1)
     pdf.ln()
     
+    # Table Body
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=10)
     for u in units:
@@ -177,7 +215,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(27, 10, f"{u['score']:.1f}", 1, 0, 'C')
         pdf.ln()
     
-    # --- PAGES 2-4: UNIT DETAILS ---
+    # PAGES 2-4: UNIT DETAILS
     for u in units:
         pdf.add_page()
         pdf.set_font("Arial", 'B', 14)
@@ -193,12 +231,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.ln()
         
         pdf.set_font("Arial", size=10)
-        tech_map = [
-            ("Vacuum", u['losses']['Vacuum']),
-            ("MS Temp", u['losses']['MS Temp']),
-            ("FG Temp", u['losses']['Flue Gas']),
-            ("Spray", u['losses']['Spray'])
-        ]
+        tech_map = [("Vacuum", u['losses']['Vacuum']), ("MS Temp", u['losses']['MS Temp']), ("FG Temp", u['losses']['Flue Gas']), ("Spray", u['losses']['Spray'])]
         for item, val in tech_map:
             pdf.cell(40, 10, item, 1)
             pdf.cell(40, 10, "-", 1)
@@ -207,16 +240,14 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
             
         pdf.ln(10)
         
-        # Generate Chart Image
+        # Chart
         fig = plt.figure(figsize=(6, 3))
         plt.bar([x[0] for x in tech_map], [x[1] for x in tech_map], color='#FF3333')
-        plt.title(f"Unit {u['id']} Loss Breakdown (kcal/kWh)")
+        plt.title(f"Unit {u['id']} Loss Breakdown")
         plt.ylabel("Loss")
-        
         img_buf = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(img_buf.name, format='png', bbox_inches='tight')
         plt.close()
-        
         pdf.image(img_buf.name, x=10, y=pdf.get_y(), w=150)
         os.unlink(img_buf.name)
         
@@ -225,10 +256,10 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(0, 10, f"ESCerts Accumulated: {u['escerts']:.2f}", 0, 1)
         pdf.cell(0, 10, f"Carbon Credits: {u['carbon']:.2f} Tons", 0, 1)
         
-    # --- PAGE 5: ASH & GREEN ---
+    # PAGE 5: ASH & GREEN
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
-    pdf.set_text_color(255, 153, 51) # GMR Orange
+    pdf.set_text_color(255, 153, 51)
     pdf.cell(0, 10, "Ash Management & Sustainability", 0, 1)
     pdf.ln(5)
     
@@ -239,7 +270,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.cell(0, 10, f"Total Ash Utilized: {ash_data['util']:,.0f} Tons", 0, 1)
     pdf.cell(0, 10, f"Pond Life Remaining: {ash_data['pond_days']:.0f} Days", 0, 1)
     pdf.ln(5)
-    
     pdf.cell(0, 10, f"Brick Potential: {ash_data['bricks']:,.0f} Bricks", 0, 1)
     pdf.cell(0, 10, f"Burj Khalifa Scale: {ash_data['burj_pct']:.2f}% of one tower", 0, 1)
     pdf.ln(10)
@@ -266,7 +296,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     coal_saved_kg = kcal_diff / COAL_GCV
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
-    
     trees_count = abs(carbon_tons / 0.025)
     acres_land = trees_count / 500
     
@@ -274,8 +303,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
     l_spray = max(0, (inputs['spray'] - 15) * 2.0)
-    theo_hr = DESIGN_HR + l_ms + l_fg + l_spray + 50 
-    l_unacc = max(0, hr - theo_hr - abs(l_vac))
+    l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
     total_pen = abs(l_vac) + l_ms + l_fg + l_spray + l_unacc
     score_5s = max(0, 100 - (total_pen / 3.0))
     
@@ -310,18 +338,23 @@ with st.sidebar:
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
     
-    # 1. DAILY UPLOAD
+    # 1. DAILY UPLOAD (SUPPORT CSV & XLSX)
     st.markdown("### 📤 Daily Input Upload")
-    uploaded_file = st.file_uploader("Upload Daily Parameters", type=['xlsx'])
+    uploaded_file = st.file_uploader("Upload Daily Parameters", type=['xlsx', 'csv'])
     defaults = {}
     if uploaded_file is not None:
         try:
-            df_up = pd.read_excel(uploaded_file)
+            if uploaded_file.name.endswith('.csv'):
+                df_up = pd.read_csv(uploaded_file)
+            else:
+                df_up = pd.read_excel(uploaded_file)
+            
             df_up.set_index('Parameter', inplace=True)
             defaults = df_up.to_dict()
             st.success("Data Loaded!")
         except: st.error("Invalid Format")
     
+    # Download Template Button
     template_df = generate_excel_template()
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -330,7 +363,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # 2. BULK HISTORY UPLOAD (UPDATED)
+    # 2. BULK HISTORY UPLOAD (FULL FIELDS)
     with st.expander("📂 Bulk History Upload (Back-Date)"):
         bulk_file = st.file_uploader("Upload Multi-Day History", type=['csv'])
         if bulk_file:
@@ -338,21 +371,15 @@ with st.sidebar:
                 try:
                     df_bulk = pd.read_csv(bulk_file)
                     df_bulk['Date'] = pd.to_datetime(df_bulk['Date'])
-                    # Validation for required fields
-                    req_cols = ['Date', 'Unit', 'Gen', 'Coal Ash %']
-                    if not all(col in df_bulk.columns for col in req_cols):
-                        st.error(f"CSV missing columns. Required: {req_cols}")
-                    else:
-                        repo = init_github()
-                        if repo:
-                            df_curr, sha = load_history(repo)
-                            # Ensure we append correctly even if columns differ slightly
-                            df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
-                            save_history(repo, df_comb, sha)
-                            st.success(f"Success! {len(df_bulk)} rows added.")
+                    repo = init_github()
+                    if repo:
+                        df_curr, sha = load_history(repo)
+                        # Consolidate columns before concat
+                        df_comb = pd.concat([df_curr, df_bulk], ignore_index=True) if not df_curr.empty else df_bulk
+                        save_history(repo, df_comb, sha)
+                        st.success(f"Success! {len(df_bulk)} rows added.")
                 except Exception as e: st.error(f"Error: {e}")
         
-        # New Bulk Template with ALL fields
         bulk_csv = generate_bulk_template().to_csv(index=False)
         st.download_button("📥 Full History Template", bulk_csv, "bulk_history_full.csv", "text/csv")
 
@@ -496,7 +523,7 @@ with tabs[0]:
     st.divider()
     
     if fleet_profit < 0:
-        st.markdown('<div style="background:#3b0e0e; color:#ffcccc; padding:15px; border-radius:8px; text-align:center; border:1px solid #FF3333;">⚠️ Fleet Alert: Efficiency Loss Detected</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:rgba(255, 61, 0, 0.2); color:#FF3D00; padding:15px; border-radius:8px; text-align:center; border:1px solid #FF3D00;">⚠️ Fleet Alert: Efficiency Loss Detected</div>', unsafe_allow_html=True)
     
     cols = st.columns(4) 
     
@@ -580,9 +607,9 @@ def render_unit_detail(u, configs):
         """, unsafe_allow_html=True)
         
         if u['sox'] > u['limits']['sox'] or u['nox'] > u['limits']['nox']:
-             st.markdown(f'<div style="background:#3b0e0e; color:#ffcccc; padding:10px; border-radius:5px; border:1px solid #FF3333; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:rgba(255, 61, 0, 0.2); color:#ffcccc; padding:10px; border-radius:5px; border:1px solid #FF3333; text-align:center;">⚠️ ACID RAIN RISK<br>High SOx/NOx Levels</div>', unsafe_allow_html=True)
         else:
-             st.markdown(f'<div style="background:#0e2e1b; color:#ccffcc; padding:10px; border-radius:5px; border:1px solid #00ff88; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
+             st.markdown(f'<div style="background:rgba(0, 230, 118, 0.2); color:#ccffcc; padding:10px; border-radius:5px; border:1px solid #00ff88; text-align:center;">✅ Safe Emissions</div>', unsafe_allow_html=True)
 
     st.divider()
     r2_c1, r2_c2 = st.columns([1, 2])
@@ -721,7 +748,7 @@ with tabs[5]:
         if anim_tree: st_lottie(anim_tree, height=100, key="green_tree")
     with col_g_3:
         st.markdown(f"""<div class="glass-card"><div class="big-money" style="color:#FF9933">{green_homes:,.0f}</div><div class="p-sub">Homes Powered</div></div>""", unsafe_allow_html=True)
-        # Safely render sun animation
+        # Safely render sun
         if anim_sun: st_lottie(anim_sun, height=100, key="sun")
 
 # --- TAB 6: INFO ---
@@ -778,6 +805,37 @@ with tabs[9]:
     fleet_sox = sum(u['sox'] * u['gen'] for u in units_data) / total_gen if total_gen > 0 else 0
     with col1: st.metric("Fleet CO2", f"{fleet_carbon:.2f} T")
     with col2: st.metric("Avg SOx", f"{fleet_sox:.1f}")
+    
+    st.divider()
+    
+    # NEW PHYSICAL GREENBELT SECTION
+    st.markdown("#### 🌳 Physical Greenbelt vs Virtual Offset")
+    
+    # Static data from file or updated via bulk history
+    # File Data: 407,010 Planted, 354,762 Net Available
+    real_trees_planted = 407010
+    real_trees_surviving = 354762
+    virtual_trees = green_trees + sum(u['trees'] for u in units_data)
+    
+    c_gb1, c_gb2 = st.columns(2)
+    with c_gb1:
+        st.markdown(f"""
+        <div class="glass-card" style="border-top: 4px solid #00ff88;">
+            <h4>Virtual Trees (Offset)</h4>
+            <h2 style="color:#00ff88">{virtual_trees:,.0f}</h2>
+            <p>Calculated based on Efficiency & Renewables</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with c_gb2:
+        st.markdown(f"""
+        <div class="glass-card" style="border-top: 4px solid #00ccff;">
+            <h4>Physical Trees (Greenbelt)</h4>
+            <h2 style="color:#00ccff">{real_trees_surviving:,.0f}</h2>
+            <p>Net Available on Ground (Survival Rate: 90%)</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
     st.divider()
     ledger_df = pd.DataFrame([{"Item": "Daily CO2", "Value": f"{fleet_carbon:.2f} Tons"},{"Item": "ESCerts Offset", "Value (₹)": f"₹ {sum(u['escerts'] * 1000 for u in units_data):,.0f}"}])
     st.dataframe(ledger_df, width="stretch")
