@@ -115,16 +115,13 @@ def load_analytics_state(repo):
 def save_analytics_state(repo, data):
     if not repo: return False
     try:
-        # ALWAYS fetch latest SHA before saving to avoid 409 Conflict
         try:
             file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
             repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
         except:
             repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
         return True
-    except Exception as e:
-        st.error(f"GitHub Save Error: {e}")
-        return False
+    except: return False
 
 # --- UNIVERSAL PARSERS ---
 def parse_plantation_file(uploaded_file):
@@ -413,16 +410,16 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_raw'] = ash_parsed
-                    if save_analytics_state(repo, analytics_state):
-                        st.success("Ash Data Saved!")
-                        st.rerun()
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Ash Data Saved!")
+                    st.rerun()
             elif "plantation" in supp_file.name.lower():
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt_raw'] = plant_parsed
-                    if save_analytics_state(repo, analytics_state):
-                        st.success("Plantation Data Saved!")
-                        st.rerun()
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Plantation Data Saved!")
+                    st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
@@ -516,17 +513,17 @@ date_in_ts = pd.Timestamp(date_in)
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    remaining_cap_tons = pond_cap - net_ash_added
+    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
+    current_capacity_tons = pond_cap - cumulative_net_added_tons
     daily_net_dump = fleet_ash_gen - fleet_ash_util
     if daily_net_dump > 0:
-        pond_days_left = remaining_cap_tons / daily_net_dump
+        pond_days_left = current_capacity_tons / daily_net_dump
     elif daily_net_dump < 0:
         pond_days_left = 9999 
     else:
         pond_days_left = 365
 else:
-    remaining_cap_tons = pond_cap
+    current_capacity_tons = pond_cap
     pond_days_left = 365
 
 total_bio = bio_u1 + bio_u2 + bio_u3
@@ -612,7 +609,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
             <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -838,10 +835,16 @@ with tabs[9]:
         m2.metric("Current CO2 Sink", f"{base_co2:,.1f} T")
         m3.metric(f"Projected (+{years_proj} yr)", f"{proj_co2:,.1f} T", delta=f"{proj_co2-base_co2:,.0f} T")
         
-        # Sunburst Chart
-        fig_sun = px.sunburst(df_filt, path=['Year', 'Species'], values='Count', color='Count', color_continuous_scale='Greens', title="Species Distribution by Year")
-        fig_sun.update_layout(height=400, margin=dict(t=30, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_sun, use_container_width=True)
+        # PIE GRID (Top 4 Species)
+        top_4 = df_filt.groupby('Species')['Count'].sum().nlargest(4).index.tolist()
+        if top_4:
+            st.markdown("#### Species Composition (Top 4)")
+            fig_grid = make_subplots(rows=1, cols=4, specs=[[{'type':'domain'}]*4], subplot_titles=top_4)
+            for i, sp in enumerate(top_4):
+                val = df_filt[df_filt['Species']==sp]['Count'].sum()
+                fig_grid.add_trace(go.Pie(labels=['Alive', 'Gap'], values=[val, val*0.1], hole=0.6, marker_colors=['#00ff88', '#333']), row=1, col=i+1)
+            fig_grid.update_layout(height=250, margin=dict(t=30, b=0, l=0, r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_grid, use_container_width=True)
     else:
         st.info("Upload 'Plantation data.xlsx' to see Greenbelt Analytics.")
 
@@ -850,6 +853,19 @@ with tabs[9]:
     if ash_raw:
         df_ash = pd.DataFrame(ash_raw)
         st.markdown('<div class="section-header">🪨 Ash Pond Impact Simulator</div>', unsafe_allow_html=True)
+        
+        # Ash Heatmap
+        st.markdown("#### Utilization Heatmap")
+        # Pivot for heatmap: Rows=Type, Cols=Month
+        # We need to melt first
+        ignore = ['month', 'generation', 'utilization', 'simulated_total']
+        avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
+        
+        if avail_cols:
+            df_heat = df_ash.melt(id_vars='Month', value_vars=avail_cols, var_name='Type', value_name='Tons')
+            fig_heat = px.density_heatmap(df_heat, x='Month', y='Type', z='Tons', color_continuous_scale='Magma')
+            fig_heat.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_heat, use_container_width=True)
         
         # Ash Slider
         sim_util_boost = st.slider("📈 Boost Ash Utilization (%)", 0, 50, 0, help="Simulate increasing utilization efforts")
@@ -870,20 +886,6 @@ with tabs[9]:
                 st.metric("Simulated Utilization", f"{boosted_util:.2f} LT", delta=f"{sim_util_boost}%")
             with a2:
                 st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
-                
-            # Stacked Area Chart (Dynamic)
-            # Find any column that looks like a utilization avenue (not Month/Gen/Total)
-            ignore = ['month', 'generation', 'utilization', 'simulated_total']
-            avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
-            
-            fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
-            
-            # Add Simulation Line
-            df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
-            fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
-            
-            fig_area.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_area, use_container_width=True)
         else:
             st.warning("Could not identify 'Utilization' column in the uploaded data.")
     else:
