@@ -80,7 +80,6 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
-        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
@@ -112,11 +111,15 @@ def load_analytics_state(repo):
     except:
         return default_data, None
 
-def save_analytics_state(repo, data, sha):
+def save_analytics_state(repo, data):
+    # FIXED: Fetch latest SHA before saving to avoid 409 Conflict
     if not repo: return False
     try:
-        if sha: repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
+        try:
+            file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
+            repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
+        except:
+            repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -124,12 +127,10 @@ def save_analytics_state(repo, data, sha):
 def parse_plantation_file(uploaded_file):
     try:
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
-        
-        # Identify Year Column
+        df.columns = [str(c).strip() for c in df.columns]
         year_col = next((c for c in df.columns if "Year" in str(c)), None)
         if not year_col: return []
         
-        # Identify Species Columns (Exclude metadata)
         exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate']
         species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
         
@@ -148,7 +149,6 @@ def parse_plantation_file(uploaded_file):
 
 def parse_ash_file(uploaded_file):
     try:
-        # Find header row dynamically
         df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
         header_idx = 0
         for i, row in df_raw.iterrows():
@@ -159,7 +159,6 @@ def parse_ash_file(uploaded_file):
         
         df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
         
-        # Map Columns flexibly
         col_map = {}
         for c in df.columns:
             cl = str(c).lower()
@@ -175,9 +174,7 @@ def parse_ash_file(uploaded_file):
         
         final_data = []
         for _, row in df.iterrows():
-            # Skip totals or empty months
             if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
-            
             record = {}
             for k, v in col_map.items():
                 val = row[v]
@@ -388,15 +385,15 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_raw'] = ash_parsed
-                    save_analytics_state(repo, analytics_state, analytics_sha)
-                    st.success("Ash Data Processed & Saved!")
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Ash Data Saved!")
                     st.rerun()
             elif "plantation" in supp_file.name.lower():
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt_raw'] = plant_parsed
-                    save_analytics_state(repo, analytics_state, analytics_sha)
-                    st.success("Plantation Data Processed & Saved!")
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Plantation Data Saved!")
                     st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
@@ -765,35 +762,36 @@ with tabs[9]:
         # Ash Slider
         sim_util_boost = st.slider("📈 Boost Ash Utilization (%)", 0, 50, 0, help="Simulate increasing utilization efforts")
         
-        # Calc logic
-        latest_ash = df_ash.iloc[-1]
-        
-        # Robust 'Utilization' access
+        # KEYERROR FIX: Dynamic column finding
         util_col = next((c for c in df_ash.columns if 'util' in str(c).lower()), None)
-        base_util_tons = latest_ash[util_col] if util_col else 0
         
-        boosted_util = base_util_tons * (1 + sim_util_boost/100)
-        saved_space = boosted_util - base_util_tons
-        pond_life_gain_days = (saved_space * 100000) / 2000 # Approx logic
-        
-        a1, a2 = st.columns(2)
-        with a1:
-            st.metric("Simulated Utilization", f"{boosted_util:.2f} LT", delta=f"{sim_util_boost}%")
-        with a2:
-            st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
+        if util_col:
+            # Calc logic
+            latest_ash = df_ash.iloc[-1]
+            base_util_tons = latest_ash[util_col]
+            boosted_util = base_util_tons * (1 + sim_util_boost/100)
+            saved_space = boosted_util - base_util_tons
+            pond_life_gain_days = (saved_space * 100000) / 2000 # Approx logic
             
-        # Stacked Area Chart (Dynamic)
-        avail_cols = [c for c in ['Bricks', 'Cement', 'Dyke', 'Mines', 'Roads', 'Reclamation'] if c in df_ash.columns]
-        
-        fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
-        
-        # Add Simulation Line
-        # We estimate "Simulated Total" line
-        df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
-        fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
-        
-        fig_area.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_area, use_container_width=True)
+            a1, a2 = st.columns(2)
+            with a1:
+                st.metric("Simulated Utilization", f"{boosted_util:.2f} LT", delta=f"{sim_util_boost}%")
+            with a2:
+                st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
+                
+            # Stacked Area Chart (Dynamic)
+            avail_cols = [c for c in ['Bricks', 'Cement', 'Dyke', 'Mines', 'Roads', 'Reclamation'] if c in df_ash.columns]
+            
+            fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
+            
+            # Add Simulation Line
+            df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
+            fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
+            
+            fig_area.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_area, use_container_width=True)
+        else:
+            st.warning("Could not identify 'Utilization' column in the uploaded data.")
     else:
         st.info("Upload 'ash.xlsx' to see Ash Analytics.")
 
