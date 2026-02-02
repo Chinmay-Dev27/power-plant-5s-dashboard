@@ -31,73 +31,24 @@ components.html(
     height=0,
 )
 
-# --- 2. VISUAL OVERHAUL (Professional Theme) ---
+# --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    /* GLOBAL THEME - Professional Slate/Navy */
-    .stApp {
-        background-color: #f0f2f6;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        font-family: 'Roboto', sans-serif;
-    }
-    
-    /* CUSTOM TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 50px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 20px;
-        color: #94a3b8;
-        font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F59E0B; /* Amber/Orange */
-        color: white;
-    }
-    
-    /* GLASS CARDS */
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        text-align: center;
-        transition: transform 0.2s ease;
-    }
+    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
+    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
-    
-    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .border-shut { border-top: 3px solid #64748b; }
     .border-green { border-top: 3px solid #00ff88; }
     .border-solar { border-top: 3px solid #FFD700; }
-    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    
-    /* SIMULATOR SLIDERS */
-    .stSlider > div > div > div > div { background-color: #F59E0B; }
-    
-    /* BURJ KHALIFA TEXT */
-    .burj-text {
-        font-family: 'Oswald', sans-serif;
-        font-size: 42px;
-        font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -129,12 +80,10 @@ def load_history(repo):
         cols = ['Gen', 'HR', 'Target HR', 'Profit', 'Vacuum', 'MS Temp', 'FG Temp', 'Spray', 'SOx', 'NOx', 'Ash Util', 'Ash Cement', 'Ash Bricks', 'Biomass', 'Solar']
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-        
         df['Date'] = pd.to_datetime(df['Date'])
         # Hard Cutoff to remove future dummy data
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
-        
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -211,23 +160,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
-    for u in units:
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, f"Unit {u['id']} Analysis", 0, 1)
-        pdf.ln(5)
-        tech_map = [("Vac", u['losses']['Vacuum']), ("MS", u['losses']['MS Temp']), ("FG", u['losses']['Flue Gas'])]
-        fig = plt.figure(figsize=(6, 3))
-        plt.bar([x[0] for x in tech_map], [x[1] for x in tech_map], color='#FF3333')
-        plt.title("Losses")
-        img_buf = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        plt.savefig(img_buf.name, format='png')
-        plt.close()
-        pdf.image(img_buf.name, x=10, y=pdf.get_y(), w=100)
-        os.unlink(img_buf.name)
-        pdf.ln(60)
-        pdf.set_font("Arial", size=10)
-        pdf.cell(0, 10, f"ESCerts: {u['escerts']:.2f} | Carbon Credits: {u['carbon']:.2f}", 0, 1)
+    
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Environment & Ash", 0, 1)
@@ -533,14 +466,22 @@ with c_top2:
 # TABS
 tabs = st.tabs(["🏠 War Room", "🌿 Sustainability", "🪨 Ash", "☀️ Green", "⚙️ Unit 1", "⚙️ Unit 2", "⚙️ Unit 3", "📈 Trends", "🎮 Sim", "ℹ️ Info"])
 
-def display_info(summary, formula):
-    with st.expander("ℹ️ How to Read This Tab"):
-        st.markdown(f"**Summary:** {summary}")
-        st.markdown(f"**Formula:** `{formula}`")
+def display_info(details):
+    with st.expander("ℹ️ How to Read This Tab (Calculations & Logic)"):
+        st.markdown(details)
 
 # TAB 1: WAR ROOM
 with tabs[0]:
-    display_info("Executive Summary. Profit > 0 (Green) / Loss (Red).", "Shutdown Loss = 350MW * 24h * 1000 * 3 Rs")
+    display_info(r"""
+    **Executive Summary:**
+    * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
+    * **Shutdown Loss:** Standardized at 350MW capacity $\times$ 24h $\times$ ₹3/unit = ₹2.52 Cr per day.
+    * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
+    
+    **Key Formulas:**
+    * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
+    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
+    """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
     if units_data:
@@ -587,7 +528,14 @@ with tabs[0]:
 
 # TAB 2: COMPLIANCE
 with tabs[1]:
-    display_info("Tracks Emission Compliance & Green Initiatives.", "Total Emissions = Gen * Emission Factor")
+    display_info(r"""
+    **Logic:**
+    * **SOx/NOx:** Real-time stack monitoring data.
+    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
+    
+    **Formulas:**
+    * $$Virtual\_Trees = \frac{Total\_Plant\_Emissions}{0.025 \text{ (CO2 absorbed per tree)}}$$
+    """)
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🌍 Emissions Status")
@@ -605,7 +553,16 @@ with tabs[1]:
 
 # TAB 3: ASH
 with tabs[2]:
-    display_info("Ash Utilization, Stock, and Brick Potential.", "Pond Life = Remaining Cap / (Gen - Util)")
+    display_info(r"""
+    **Ash Management:**
+    * **Generation:** Calculated based on Coal Consumption & Ash %.
+    * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
+    * **Burj Khalifa Index:** A fun metric comparing total ash volume to the volume of the Burj Khalifa.
+    
+    **Formulas:**
+    * $$Ash\_Gen = Coal\_Cons \times Ash\%$$
+    * $$Burj\_Index = \frac{Ash\_Volume}{Burj\_Volume}$$
+    """)
     c1, c2 = st.columns(2)
     with c1:
         st.metric("Ash Generated", f"{fleet_ash_gen:,.0f} T")
@@ -622,7 +579,14 @@ with tabs[2]:
 
 # TAB 4: RENEWABLES
 with tabs[3]:
-    display_info("Impact of Biomass Co-firing and Solar Power.", "CO2 Saved = Coal Equiv * 1.7")
+    display_info(r"""
+    **Green Power Impact:**
+    * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
+    * **Solar:** Captive solar power reducing auxiliary consumption.
+    
+    **Equivalency:**
+    * $$Homes\_Powered = \frac{Renewable\_Units}{4 \text{ (Avg Daily Consumption)}}$$
+    """)
     st.markdown("#### ⚡ Green Power Impact")
     
     # GLASS CARDS FOR RENEWABLES
@@ -649,25 +613,27 @@ with tabs[3]:
             <div class="sub-lbl">Homes Powered</div>
         </div>""", unsafe_allow_html=True)
         
-    with st.expander("ℹ️ Calculation Details"):
-        st.write(f"""
-        - **Solar:** 1 MU = 1,000,000 Units. Avg Home Consumption = 4 Units/Day.
-        - **Biomass:** 1 kg Biomass (3000 kcal) ≈ 1.2 kWh.
-        - **CO2:** 0.95 kg/kWh for Solar, Net-Zero for Biomass (Avoided Coal).
-        """)
-        
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
 if units_data:
     for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
         with tab:
+            display_info(r"""
+            **Unit Performance:**
+            * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
+            * **5S Score:** Technical hygiene score based on parameter adherence.
+            
+            **Loss Formulas (Approx):**
+            * Vacuum: 15 kcal/kWh per 0.01 deviation.
+            * MS Temp: 0.7 kcal/kWh per degree deviation.
+            """)
             u = units_data[i]
             render_unit_detail(u, configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis", "Double-click legend to isolate Unit.")
+    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
@@ -695,74 +661,58 @@ with tabs[7]:
 # TAB 9: SIMULATOR
 with tabs[8]:
     st.markdown("### 🎮 Simulator")
+    display_info(r"""
+    **Simulation Logic:**
+    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
+    * **Vacuum:** Lower (more negative) is better.
+    * **APC:** Auxiliary Power Consumption directly reduces salable power.
+    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
+    """)
     
     # 3x2 Grid for Sliders
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
-        s_vac = st.slider("Vacuum (kg/cm2)", -0.80, -0.99, -0.92, step=0.001)
+        s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
-        s_spray = st.slider("Spray (TPH)", 0, 50, 15)
+        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1, help="Aux Power Cons. Standard: 6.5%")
     with s_c3:
-        s_solar = st.slider("Solar Impact (MU)", 0.0, 0.1, 0.0)
+        s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
     
     # Simulation Logic
     # Base HR = 2250.
-    # Vac Impact: 15 kcal per 0.01 deviation from -0.92
-    sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 # Negative because higher vac (more neg) is better
-    
-    # MS Temp Impact: 0.7 kcal per deg deviation from 540
+    sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
-    
-    # FG Temp Impact: 1 kcal per 2 deg deviation from 130
     sim_fg_loss = (s_fg - 130) / 2
     
-    # Spray Impact: 2 kcal per TPH deviation from 15
-    sim_spray_loss = (s_spray - 15) * 2
-    
     # Total HR Impact
-    sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss + sim_spray_loss
+    sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
     
     # Financial Impact (Daily for 1 Unit @ 8.4 MU)
-    # 1 kcal/kWh = 1000 * 8.4 / 3500 (approx) tons coal
-    # Profit Impact = HR_Impact * Gen * Cost_Factor
-    # Let's use standard Profit formula derivative:
-    # Delta Profit = ( - Delta HR ) * Gen * 1000
-    sim_daily_profit_impact = (-1 * sim_hr_impact) * 8.4 * 1000 
+    # Profit Impact = HR Impact + APC Impact + GCV Cost
+    # APC Impact: 1% increase = 1% loss of revenue
+    # Revenue/day = 8.4 MU * 10^6 * 3 Rs = 2.52 Cr
+    base_revenue = 25200000 
+    sim_apc_loss = base_revenue * ((s_apc - 6.5)/100) * -1
     
-    # Solar/Biomass Benefit
-    # Solar: Direct addition to revenue or saving aux power. 
-    # Value = Solar MU * 3 Rs/unit * 1,000,000 / 100,000 (Lacs)
-    sim_solar_save = s_solar * 3 * 10
+    # HR Profit Impact
+    sim_hr_profit = (-1 * sim_hr_impact) * 8.4 * 1000
+    
+    total_sim_impact = sim_hr_profit + sim_apc_loss
     
     st.divider()
     r1, r2, r3 = st.columns(3)
     with r1:
         st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
     with r2:
-        st.metric("Daily Profit Impact", f"₹ {sim_daily_profit_impact/100000:.2f} Lac")
+        st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
     with r3:
-        st.metric("Green Saving", f"₹ {sim_solar_save:.2f} Lac")
+        st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
 # TAB 10: INFO
 with tabs[9]:
-    st.markdown("### 📚 Knowledge Base & Formulas")
-    
-    with st.expander("💰 Profit Calculation"):
-        st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
-        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
-        
-    with st.expander("🪨 Ash Pond Logic"):
-        st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
-        st.write("Capacity is fixed. Net accumulation reduces remaining space. If Utilization > Generation, space increases.")
-        
-    with st.expander("🏆 5S Score Logic"):
-        st.write("Score starts at 100 and is penalized for deviations:")
-        st.latex(r"Penalty = \frac{|Vac_{dev}| + MS_{dev} + FG_{dev} + Spray_{dev}}{3}")
-        st.latex(r"Score = 100 - Penalty")
-    
-    with st.expander("☀️ Solar & Biomass"):
-        st.write("- **Solar Homes:** 1 MU = 1 Million Units. Avg Home = 1460 Units/Year (~4/day).")
-        st.write("- **Biomass:** 1 kg Biomass ≈ 1.2 kWh Electricity equivalent (avoided coal).")
+    try: st.image("1000051705.jpg", use_container_width=True)
+    except: pass
+    st.markdown("### 5S Pillars: Sort, Set in Order, Shine, Standardize, Sustain")
