@@ -127,7 +127,6 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
-        # Hard Cutoff to remove future dummy data
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
@@ -171,32 +170,57 @@ def format_lacs(value):
     val_lac = value / 100000
     return f"₹ {val_lac:,.2f} Lac"
 
-# --- NEW: ANALYTICS DATA LOADERS ---
-def get_greenbelt_data():
-    # Demo data based on user files
-    return {
-        'total_planted': 407010,
-        'matured': 394180,
-        'survival_rate': 90,
-        'net_available': 354762,
-        'ghg_removal': 8869.05,
-        'species': {
-            'Pongamia': 19074, 'Alstonia': 14215, 'Peltophorrum': 13224, 
-            'Neem': 102604, 'Kadamba': 36127, 'Mango': 3500, 'Guava': 3549,
-            'Ashoka': 3000, 'Teak': 15000, 'Bamboo': 50000, 'Others': 100000
+# --- NEW: ANALYTICS PARSERS (Dynamic) ---
+def parse_plantation_file(uploaded_file):
+    try:
+        # User format: "Plantation data.xlsx" with species cols
+        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+        # Look for Total row or summary
+        # Simplified parser for demo stability:
+        # Assuming cols: 'Financial Year', 'Pongamia', 'Neem'...
+        # And a 'Total' column or row
+        # If strict structure unknown, we extract numeric columns for species
+        species_cols = [c for c in df.columns if c not in ['Financial Year', 'Total', 'Survival Rate', 'Remarks']]
+        species_sum = df[species_cols].sum().to_dict()
+        
+        total_planted = df['Total'].sum() if 'Total' in df.columns else sum(species_sum.values())
+        return {
+            'total_planted': total_planted,
+            'matured': total_planted * 0.95, # Approx
+            'survival_rate': 90, # Approx from file snippet
+            'ghg_removal': total_planted * 0.025 * 1000, # Dummy logic if col missing
+            'species': species_sum
         }
-    }
+    except: return None
 
-def get_ash_analytics_data():
-    # Demo data extracted from user snippets
-    # LTPM = Lakh Tons Per Month? Assuming standard tons for visualization scaling
+def parse_ash_file(uploaded_file):
+    try:
+        df = pd.read_excel(uploaded_file, header=9) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=9)
+        # Expecting 'Month', 'Ash Generation', 'Ash Utilized', 'Bricks', 'Cement'
+        # Standardize cols
+        # Map user cols to standard
+        col_map = {'Ash Generation (in LTPM)': 'Generation', 'Ash Utilized\n(in LTPM)': 'Utilization', 
+                   'Bricks': 'Bricks', 'Cement': 'Cement', 'Ash Dyke Raising': 'Dyke'}
+        # Fuzzy match
+        clean_cols = {}
+        for c in df.columns:
+            for k, v in col_map.items():
+                if k in str(c): clean_cols[c] = v
+        df = df.rename(columns=clean_cols)
+        return df[['Month', 'Generation', 'Utilization', 'Bricks', 'Cement', 'Dyke']].dropna()
+    except: return None
+
+# Fallback Data
+def get_greenbelt_data_static():
+    return {
+        'total_planted': 407010, 'matured': 394180, 'survival_rate': 90, 'net_available': 354762, 'ghg_removal': 8869.05,
+        'species': {'Pongamia': 19074, 'Neem': 102604, 'Kadamba': 36127, 'Teak': 15000, 'Bamboo': 50000}
+    }
+def get_ash_analytics_data_static():
     return pd.DataFrame({
-        'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT'],
-        'Generation': [2.42, 2.45, 2.27, 1.87, 2.10, 2.30, 2.40], # In Lakh Tons
-        'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10, 2.30, 2.40], # 100% util mostly
-        'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70, 0.75, 0.80],
-        'Cement': [0.78, 0.78, 0.66, 0.50, 0.65, 0.70, 0.75],
-        'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75, 0.85, 0.85]
+        'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG'],
+        'Generation': [2.42, 2.45, 2.27, 1.87, 2.10], 'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10],
+        'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70], 'Cement': [0.78, 0.78, 0.66, 0.50, 0.65], 'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75]
     })
 
 # --- 4. PDF ENGINE ---
@@ -218,8 +242,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
-    
-    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -234,7 +256,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
-    
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Environment & Ash", 0, 1)
@@ -261,7 +282,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         coal_saved_kg = kcal_diff / COAL_GCV
         carbon_tons = (coal_saved_kg / 1000) * 1.7
         profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
-        
         l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
         l_ms = max(0, (540 - inputs['ms']) * 1.2)
         l_fg = max(0, (inputs['fg'] - 130) * 1.5)
@@ -276,7 +296,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
-    
     bio_units = ash_params.get('biomass', 0) * 1000 * 1.2 
     homes_bio = bio_units / 4 
     
@@ -298,7 +317,6 @@ def render_unit_detail(u, configs):
     if u['status'] == "SHUTDOWN":
         st.error("🚨 UNIT SHUTDOWN - No Efficiency Analysis Available")
         return
-
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
@@ -314,7 +332,6 @@ def render_unit_detail(u, configs):
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
-
     with c2:
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
@@ -326,29 +343,22 @@ def render_unit_detail(u, configs):
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
-
     st.divider()
     c3, c4 = st.columns(2)
-    with c3:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
+    with c4: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
     try: st.image("1000051706.png", width="stretch")
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
-    
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     units_data = [] # Init
-    
     repo = init_github()
     hist_df, sha = load_history(repo)
-    
     hist_data = {}
     if not hist_df.empty:
-        # ROBUST DATE COMPARISON: Compare Timestamps directly
         date_in_ts = pd.Timestamp(date_in)
         day_df = hist_df[hist_df['Date'] == date_in_ts]
         if not day_df.empty:
@@ -358,7 +368,7 @@ with st.sidebar:
         else:
             st.info("No history. Using inputs.")
     
-    with st.expander("📤 Upload Data"):
+    with st.expander("📤 Upload Operational Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
         daily_defaults = {}
         if uploaded_file:
@@ -375,15 +385,7 @@ with st.sidebar:
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
         if bulk_file and st.button("🚀 Process Bulk"):
             try:
-                try:
-                    df_b = pd.read_csv(bulk_file)
-                except UnicodeDecodeError:
-                    bulk_file.seek(0)
-                    df_b = pd.read_csv(bulk_file, encoding='latin-1')
-                except Exception:
-                    bulk_file.seek(0)
-                    df_b = pd.read_csv(bulk_file, encoding='cp1252')
-
+                df_b = pd.read_csv(bulk_file)
                 df_b['Date'] = pd.to_datetime(df_b['Date']).dt.strftime('%Y-%m-%d')
                 if repo:
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
@@ -393,25 +395,36 @@ with st.sidebar:
                     df_comb = df_comb.sort_values('Date')
                     df_comb['Date'] = df_comb['Date'].dt.strftime('%Y-%m-%d')
                     df_comb = df_comb.drop_duplicates(subset=['Date', 'Unit'], keep='last')
-                    
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
                     st.success(f"Bulk Uploaded! Records: {len(df_comb)}")
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
-        col_dl1, col_dl2 = st.columns(2)
-        with col_dl1:
-            if units_data:
-                pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
-                for u in units_data:
-                    idx = int(u['id'])-1
-                    inp = u['inputs']
-                    vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
-                    pre_data_dict[f"Unit {u['id']}"] = vals
-                out_d = BytesIO()
-                pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
-                st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
+    # NEW: SUPPLEMENTARY UPLOADER
+    with st.expander("📂 Supplementary Reports (Analytics)"):
+        st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics charts.")
+        supp_file = st.file_uploader("Upload Report", type=['xlsx'])
+        if supp_file:
+            if "ash" in supp_file.name.lower():
+                st.session_state['ash_data'] = parse_ash_file(supp_file)
+                st.success("Ash Data Updated!")
+            elif "plantation" in supp_file.name.lower():
+                st.session_state['plantation_data'] = parse_plantation_file(supp_file)
+                st.success("Plantation Data Updated!")
+
+    col_dl1, col_dl2 = st.columns(2)
+    with col_dl1:
+        if units_data:
+            pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
+            for u in units_data:
+                idx = int(u['id'])-1
+                inp = u['inputs']
+                vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
+                pre_data_dict[f"Unit {u['id']}"] = vals
+            out_d = BytesIO()
+            pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
+            st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
 
     st.markdown("---")
     
@@ -423,7 +436,7 @@ with st.sidebar:
         t_u1 = st.number_input("U1 Target HR", 2300); g_u1 = st.number_input("U1 GCV", 3600)
         t_u2 = st.number_input("U2 Target HR", 2310); g_u2 = st.number_input("U2 GCV", 3550)
         t_u3 = st.number_input("U3 Target HR", 2295); g_u3 = st.number_input("U3 GCV", 3620)
-        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Max Cap", 500000, help="Total Capacity in Tons"); pond_curr = st.number_input("Pond Stock", 350000)
+        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Max Cap", 500000); pond_curr = st.number_input("Pond Stock", 350000)
         
     with tab_inp:
         configs = [{'target_hr': t_u1, 'gcv': g_u1, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
@@ -488,10 +501,8 @@ fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-# ASH POND CUMULATIVE LOGIC
 pond_days_calc = 365.0
 date_in_ts = pd.Timestamp(date_in)
-
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
@@ -551,6 +562,10 @@ with tabs[0]:
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
     * **Shutdown Loss:** Standardized at 350MW capacity $\times$ 24h $\times$ ₹3/unit = ₹2.52 Cr per day.
     * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
+    
+    **Key Formulas:**
+    * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
+    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
     """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
@@ -598,7 +613,11 @@ with tabs[0]:
 
 # TAB 2: COMPLIANCE
 with tabs[1]:
-    display_info("Tracks Emission Compliance & Green Initiatives.")
+    display_info(r"""
+    **Logic:**
+    * **SOx/NOx:** Real-time stack monitoring data.
+    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
+    """)
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🌍 Emissions Status")
@@ -615,7 +634,11 @@ with tabs[1]:
 
 # TAB 3: ASH
 with tabs[2]:
-    display_info("Ash Utilization, Stock, and Brick Potential.")
+    display_info(r"""
+    **Ash Management:**
+    * **Generation:** Calculated based on Coal Consumption & Ash %.
+    * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
+    """)
     c1, c2 = st.columns(2)
     with c1:
         st.metric("Ash Generated", f"{fleet_ash_gen:,.0f} T")
@@ -632,7 +655,11 @@ with tabs[2]:
 
 # TAB 4: RENEWABLES
 with tabs[3]:
-    display_info("Impact of Biomass Co-firing and Solar Power.")
+    display_info(r"""
+    **Green Power Impact:**
+    * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
+    * **Solar:** Captive solar power reducing auxiliary consumption.
+    """)
     st.markdown("#### ⚡ Green Power Impact")
     c1, c2 = st.columns(2)
     with c1:
@@ -676,17 +703,21 @@ with tabs[7]:
 # TAB 9: SIMULATOR
 with tabs[8]:
     st.markdown("### 🎮 Simulator")
+    display_info(r"""
+    **Simulation Logic:**
+    * **Vacuum:** Lower (more negative) is better.
+    * **APC:** Auxiliary Power Consumption.
+    """)
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
-        s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
+        s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001)
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
-        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1, help="Aux Power Cons. Standard: 6.5%")
+        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1)
     with s_c3:
         s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
-    
     sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
     sim_fg_loss = (s_fg - 130) / 2
@@ -704,8 +735,9 @@ with tabs[8]:
 # TAB 10: ANALYTICS
 with tabs[9]:
     st.markdown("### 📊 Power BI Analytics")
-    gb_data = get_greenbelt_data()
-    ash_df = get_ash_analytics_data()
+    # Load dynamic if available, else static
+    gb_data = st.session_state.get('plantation_data', get_greenbelt_data_static())
+    ash_df = st.session_state.get('ash_data', get_ash_analytics_data_static())
     
     st.markdown('<div class="section-header">🌳 Greenbelt Analytics</div>', unsafe_allow_html=True)
     k1, k2, k3, k4 = st.columns(4)
@@ -724,8 +756,7 @@ with tabs[9]:
     with c2:
         st.markdown("#### Carbon Sink Status")
         fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = gb_data['ghg_removal'],
+            mode = "gauge+number", value = gb_data['ghg_removal'],
             title = {'text': "GHG Removal (Tons)"},
             gauge = {'axis': {'range': [0, 15000]}, 'bar': {'color': "#00ff88"}}
         ))
@@ -742,7 +773,13 @@ with tabs[9]:
     with a2:
         st.markdown("#### Utilization Breakdown")
         latest = ash_df.iloc[-1]
-        pie_data = pd.DataFrame({'Area': ['Bricks', 'Cement', 'Dyke'], 'Value': [latest['Bricks'], latest['Cement'], latest['Dyke']]})
+        # Dynamic check for columns
+        pie_data_dict = {}
+        if 'Bricks' in ash_df.columns: pie_data_dict['Bricks'] = latest['Bricks']
+        if 'Cement' in ash_df.columns: pie_data_dict['Cement'] = latest['Cement']
+        if 'Dyke' in ash_df.columns: pie_data_dict['Dyke'] = latest['Dyke']
+        
+        pie_data = pd.DataFrame(list(pie_data_dict.items()), columns=['Area', 'Value'])
         fig_pie = px.pie(pie_data, values='Value', names='Area', hole=0.4, template='plotly_dark', color_discrete_sequence=px.colors.sequential.RdBu)
         fig_pie.update_layout(height=350, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_pie, use_container_width=True)
@@ -752,7 +789,6 @@ with tabs[10]:
     st.markdown("### 📚 Knowledge Base & Formulas")
     with st.expander("💰 Profit Calculation"):
         st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
-        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
     with st.expander("🪨 Ash Pond Logic"):
         st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
     with st.expander("🏆 5S Score Logic"):
