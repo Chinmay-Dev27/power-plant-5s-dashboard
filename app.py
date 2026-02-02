@@ -100,15 +100,17 @@ def save_history(repo, df, sha):
 
 # --- ANALYTICS STATE HANDLING (JSON) ---
 def load_analytics_state(repo):
-    # Initializes empty structure if file missing
-    default = {"greenbelt_raw": [], "ash_raw": []}
-    if not repo: return default
+    default_data = {
+        "greenbelt_raw": [], 
+        "ash_raw": []
+    }
+    if not repo: return default_data
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
         return data, file.sha
     except:
-        return default, None
+        return default_data, None
 
 def save_analytics_state(repo, data, sha):
     if not repo: return False
@@ -118,79 +120,67 @@ def save_analytics_state(repo, data, sha):
         return True
     except: return False
 
-# --- IMPROVED PARSERS ---
+# --- ROBUST PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         
-        # Clean up column names
-        df.columns = [str(c).strip() for c in df.columns]
-        
         # Identify Year Column
-        year_col = next((c for c in df.columns if "Year" in c), None)
+        year_col = next((c for c in df.columns if "Year" in str(c)), None)
         if not year_col: return []
         
-        # Identify Species Columns (Exclude meta cols)
-        exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured']
-        species_cols = [c for c in df.columns if not any(x in c for x in exclude)]
+        # Identify Species Columns (Exclude metadata)
+        exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate']
+        species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
         
-        # Convert to list of records for JSON
-        # Structure: [{'Year': '2014-15', 'Species': 'Neem', 'Count': 500}, ...]
         records = []
         for _, row in df.iterrows():
             yr = row[year_col]
             if pd.isna(yr) or str(yr).lower() == 'total': continue
             for sp in species_cols:
                 val = row[sp]
-                if pd.notna(val) and val > 0:
-                    records.append({'Year': str(yr), 'Species': sp, 'Count': int(val)})
+                if pd.notna(val) and isinstance(val, (int, float)) and val > 0:
+                    records.append({'Year': str(yr), 'Species': str(sp).strip(), 'Count': int(val)})
         return records
     except Exception as e:
-        st.error(f"Parse Error: {e}")
+        st.error(f"Plantation Parse Error: {e}")
         return []
 
 def parse_ash_file(uploaded_file):
     try:
-        # Header is usually row 9/10 in standard reports, auto-detect 'Month'
-        df = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
-        
-        # Find header row
+        # Find header row dynamically
+        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
         header_idx = 0
-        for i, row in df.iterrows():
-            row_str = row.astype(str).str.lower().tolist()
-            if any("month" in s for s in row_str) and any("generation" in s for s in row_str):
+        for i, row in df_raw.iterrows():
+            s = row.astype(str).str.lower().tolist()
+            if any("month" in x for x in s) and any("generation" in x for x in s):
                 header_idx = i
                 break
         
         df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
         
-        # Normalize columns
-        df.columns = [str(c).replace('\n', ' ').strip() for c in df.columns]
-        
-        # Identify Key Columns using keywords
+        # Map Columns flexibly
         col_map = {}
         for c in df.columns:
-            cl = c.lower()
+            cl = str(c).lower()
             if "month" in cl: col_map['Month'] = c
             elif "generation" in cl and "ash" in cl: col_map['Generation'] = c
             elif "utilized" in cl and "ash" in cl: col_map['Utilization'] = c
             elif "brick" in cl: col_map['Bricks'] = c
             elif "cement" in cl: col_map['Cement'] = c
-            elif "road" in cl: col_map['Roads'] = c
             elif "dyke" in cl: col_map['Dyke'] = c
+            elif "road" in cl: col_map['Roads'] = c
             elif "mine" in cl: col_map['Mines'] = c
-            elif "hydro" in cl: col_map['Hydro'] = c
             elif "reclaimation" in cl: col_map['Reclamation'] = c
-            elif "agriculture" in cl: col_map['Agriculture'] = c
         
-        # Extract only valid data
         final_data = []
         for _, row in df.iterrows():
-            if pd.isna(row[col_map.get('Month', '')]): continue
+            # Skip totals or empty months
+            if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
+            
             record = {}
             for k, v in col_map.items():
                 val = row[v]
-                # Clean numeric values
                 if k != 'Month':
                     try: val = float(val)
                     except: val = 0.0
@@ -245,6 +235,13 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "Environment & Ash", 0, 1)
+    pdf.ln(5)
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, f"Ash Gen: {ash_data['gen']:.0f} T | Util: {ash_data['util']:.0f} T", 0, 1)
+    pdf.cell(0, 10, f"Solar CO2 Saved: {green_data['sol_co2']:.2f} T", 0, 1)
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
@@ -550,6 +547,10 @@ with tabs[0]:
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
     * **Shutdown Loss:** Standardized at 350MW capacity $\times$ 24h $\times$ ₹3/unit = ₹2.52 Cr per day.
     * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
+    
+    **Key Formulas:**
+    * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
+    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
     """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
@@ -734,16 +735,17 @@ with tabs[9]:
         with gc1:
             years_proj = st.slider("⏳ Time Machine (Years)", 0, 30, 0, help="Project CO2 removal into the future")
         with gc2:
-            all_sp = df_gb['Species'].unique()
+            all_sp = sorted(df_gb['Species'].unique())
             sel_sp = st.multiselect("Filter Species", all_sp, default=all_sp[:5])
         
         # Filter & Calc
-        df_filt = df_gb[df_gb['Species'].isin(sel_sp)]
-        base_co2 = df_filt['Count'].sum() * 0.025 # 25kg/tree
+        df_filt = df_gb[df_gb['Species'].isin(sel_sp)] if sel_sp else df_gb
+        current_trees = df_filt['Count'].sum()
+        base_co2 = current_trees * 0.025 # 25kg/tree
         proj_co2 = base_co2 * ((1.05)**years_proj) # 5% growth
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Trees", f"{df_filt['Count'].sum():,}")
+        m1.metric("Selected Trees", f"{current_trees:,}")
         m2.metric("Current CO2 Sink", f"{base_co2:,.1f} T")
         m3.metric(f"Projected (+{years_proj} yr)", f"{proj_co2:,.1f} T", delta=f"{proj_co2-base_co2:,.0f} T")
         
@@ -765,7 +767,11 @@ with tabs[9]:
         
         # Calc logic
         latest_ash = df_ash.iloc[-1]
-        base_util_tons = latest_ash['Utilization']
+        
+        # Robust 'Utilization' access
+        util_col = next((c for c in df_ash.columns if 'util' in str(c).lower()), None)
+        base_util_tons = latest_ash[util_col] if util_col else 0
+        
         boosted_util = base_util_tons * (1 + sim_util_boost/100)
         saved_space = boosted_util - base_util_tons
         pond_life_gain_days = (saved_space * 100000) / 2000 # Approx logic
@@ -776,8 +782,16 @@ with tabs[9]:
         with a2:
             st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
             
-        # Stacked Area Chart
-        fig_area = px.area(df_ash, x='Month', y=['Bricks', 'Cement', 'Dyke', 'Mines', 'Roads', 'Reclamation'], title="Utilization Avenues Trend")
+        # Stacked Area Chart (Dynamic)
+        avail_cols = [c for c in ['Bricks', 'Cement', 'Dyke', 'Mines', 'Roads', 'Reclamation'] if c in df_ash.columns]
+        
+        fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
+        
+        # Add Simulation Line
+        # We estimate "Simulated Total" line
+        df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
+        fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
+        
         fig_area.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_area, use_container_width=True)
     else:
@@ -788,6 +802,7 @@ with tabs[10]:
     st.markdown("### 📚 Knowledge Base & Formulas")
     with st.expander("💰 Profit Calculation"):
         st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
+        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
     with st.expander("🪨 Ash Pond Logic"):
         st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
     with st.expander("🏆 5S Score Logic"):
