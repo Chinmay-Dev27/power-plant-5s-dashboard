@@ -1,17 +1,17 @@
 {
   "greenbelt_raw": [
-    {"Year": "2014-15", "Species": "Neem", "Count": 15000},
-    {"Year": "2014-15", "Species": "Teak", "Count": 5000},
-    {"Year": "2015-16", "Species": "Pongamia", "Count": 12000},
-    {"Year": "2016-17", "Species": "Bamboo", "Count": 25000},
-    {"Year": "2017-18", "Species": "Kadamba", "Count": 8000},
-    {"Year": "2018-19", "Species": "Cheeku", "Count": 500},
-    {"Year": "2019-20", "Species": "Guava", "Count": 600},
-    {"Year": "2020-21", "Species": "Mango", "Count": 450},
-    {"Year": "2021-22", "Species": "Neem", "Count": 10000},
-    {"Year": "2022-23", "Species": "Teak", "Count": 8000},
-    {"Year": "2023-24", "Species": "Others", "Count": 50000},
-    {"Year": "2024-25", "Species": "Mixed", "Count": 45000}
+    {"Year": "2014-15", "Species": "Neem", "Planted": 15000, "Matured": 14200},
+    {"Year": "2014-15", "Species": "Teak", "Planted": 5000, "Matured": 4800},
+    {"Year": "2015-16", "Species": "Pongamia", "Planted": 12000, "Matured": 10500},
+    {"Year": "2016-17", "Species": "Bamboo", "Planted": 25000, "Matured": 24000},
+    {"Year": "2017-18", "Species": "Kadamba", "Planted": 8000, "Matured": 7200},
+    {"Year": "2018-19", "Species": "Cheeku", "Planted": 500, "Matured": 450},
+    {"Year": "2019-20", "Species": "Guava", "Planted": 600, "Matured": 580},
+    {"Year": "2020-21", "Species": "Mango", "Planted": 450, "Matured": 400},
+    {"Year": "2021-22", "Species": "Neem", "Planted": 10000, "Matured": 9800},
+    {"Year": "2022-23", "Species": "Teak", "Planted": 8000, "Matured": 7500},
+    {"Year": "2023-24", "Species": "Others", "Planted": 50000, "Matured": 48000},
+    {"Year": "2024-25", "Species": "Mixed", "Planted": 45000, "Matured": 42000}
   ],
   "ash_raw": [
     {"Month": "APR", "Generation": 2.42, "Utilization": 2.42, "Bricks": 0.79, "Cement": 0.78, "Dyke": 0.84, "Road Embankment": 0.01, "Mines": 0.0},
