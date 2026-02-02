@@ -375,10 +375,18 @@ with st.sidebar:
                 if repo:
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
+                    
+                    # --- SMART MERGE LOGIC ---
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
+                    df_comb['Date'] = pd.to_datetime(df_comb['Date'])
+                    df_comb = df_comb.sort_values('Date')
+                    df_comb['Date'] = df_comb['Date'].dt.strftime('%Y-%m-%d')
+                    # Deduplicate: Keep LAST occurrence (new upload overwrites old)
+                    df_comb = df_comb.drop_duplicates(subset=['Date', 'Unit'], keep='last')
+                    
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
-                    st.success("Bulk Uploaded!")
+                    st.success(f"Bulk Uploaded! Total records: {len(df_comb)}")
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
@@ -405,7 +413,7 @@ with st.sidebar:
         t_u1 = st.number_input("U1 Target HR", 2300); g_u1 = st.number_input("U1 GCV", 3600)
         t_u2 = st.number_input("U2 Target HR", 2310); g_u2 = st.number_input("U2 GCV", 3550)
         t_u3 = st.number_input("U3 Target HR", 2295); g_u3 = st.number_input("U3 GCV", 3620)
-        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Max Cap", 500000, help="Total Capacity in Tons"); pond_curr = st.number_input("Pond Stock", 350000)
+        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Cap", 500000); pond_curr = st.number_input("Pond Stock", 350000)
         
     with tab_inp:
         configs = [{'target_hr': t_u1, 'gcv': g_u1, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
@@ -471,41 +479,27 @@ fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data els
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
 # ASH POND CUMULATIVE LOGIC
-# Logic: Capacity decreases if we dump more than utilize. Increases if we remove more.
 pond_days_calc = 365.0
 date_in_ts = pd.Timestamp(date_in)
 
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     
-    # Re-calculate Ash Generation from History (approx)
+    # Recalculate ash gen
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    
-    # Net Ash Added to Pond (Generation - Utilization)
-    # If Gen > Util -> Positive (Filling up)
-    # If Util > Gen -> Negative (Emptying)
-    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    
-    # Remaining Capacity = Max Cap - Net Added
-    current_capacity_tons = pond_cap - cumulative_net_added_tons
-    
-    # Daily Net Dump Rate (Today)
+    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
+    remaining_cap_tons = pond_cap - net_ash_added
     daily_net_dump = fleet_ash_gen - fleet_ash_util
     
-    # Days Left Calculation
     if daily_net_dump > 0:
-        # We are filling up. How long until full?
-        pond_days_left = current_capacity_tons / daily_net_dump
+        pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
-        # We are emptying. Days left is effectively infinite/increasing.
         pond_days_left = 9999 
     else:
-        # Stable
         pond_days_left = 365
 else:
-    # Default
-    current_capacity_tons = pond_cap
     pond_days_left = 365
+    remaining_cap_tons = pond_cap
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -582,7 +576,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
             <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -683,7 +677,7 @@ with tabs[7]:
         
         filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
         
-        filtered_df['Date_dt'] = filtered_df['Date'].dt.date
+        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff8c00', '3': '#00ff9d'}
