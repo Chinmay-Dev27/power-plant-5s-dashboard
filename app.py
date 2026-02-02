@@ -31,7 +31,7 @@ components.html(
     height=0,
 )
 
-# --- 2. VISUAL OVERHAUL (Restored Professional Theme) ---
+# --- 2. VISUAL OVERHAUL (Professional Theme) ---
 st.markdown("""
     <style>
     /* GLOBAL THEME - Professional Slate/Navy */
@@ -86,6 +86,9 @@ st.markdown("""
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
     
+    /* SIMULATOR SLIDERS */
+    .stSlider > div > div > div > div { background-color: #F59E0B; }
+    
     /* BURJ KHALIFA TEXT */
     .burj-text {
         font-family: 'Oswald', sans-serif;
@@ -127,8 +130,11 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         
-        # CRITICAL FIX: Convert to Pandas Timestamp
         df['Date'] = pd.to_datetime(df['Date'])
+        # Hard Cutoff to remove future dummy data
+        cutoff_date = pd.Timestamp("2026-01-31")
+        df = df[df['Date'] <= cutoff_date]
+        
         return df, file.sha
     except: 
         cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
@@ -335,7 +341,6 @@ with st.sidebar:
     
     hist_data = {}
     if not hist_df.empty:
-        # ROBUST DATE COMPARISON: Compare Timestamps directly
         date_in_ts = pd.Timestamp(date_in)
         day_df = hist_df[hist_df['Date'] == date_in_ts]
         if not day_df.empty:
@@ -375,18 +380,15 @@ with st.sidebar:
                 if repo:
                     file = repo.get_contents("plant_history_v28.csv", ref=st.secrets["BRANCH"])
                     df_curr = pd.read_csv(StringIO(file.decoded_content.decode()))
-                    
-                    # --- SMART MERGE LOGIC ---
                     df_comb = pd.concat([df_curr, df_b], ignore_index=True)
                     df_comb['Date'] = pd.to_datetime(df_comb['Date'])
                     df_comb = df_comb.sort_values('Date')
                     df_comb['Date'] = df_comb['Date'].dt.strftime('%Y-%m-%d')
-                    # Deduplicate: Keep LAST occurrence (new upload overwrites old)
                     df_comb = df_comb.drop_duplicates(subset=['Date', 'Unit'], keep='last')
                     
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
-                    st.success(f"Bulk Uploaded! Total records: {len(df_comb)}")
+                    st.success(f"Bulk Uploaded! Records: {len(df_comb)}")
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
@@ -413,7 +415,7 @@ with st.sidebar:
         t_u1 = st.number_input("U1 Target HR", 2300); g_u1 = st.number_input("U1 GCV", 3600)
         t_u2 = st.number_input("U2 Target HR", 2310); g_u2 = st.number_input("U2 GCV", 3550)
         t_u3 = st.number_input("U3 Target HR", 2295); g_u3 = st.number_input("U3 GCV", 3620)
-        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Cap", 500000); pond_curr = st.number_input("Pond Stock", 350000)
+        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Max Cap", 500000, help="Total Capacity in Tons"); pond_curr = st.number_input("Pond Stock", 350000)
         
     with tab_inp:
         configs = [{'target_hr': t_u1, 'gcv': g_u1, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
@@ -484,8 +486,6 @@ date_in_ts = pd.Timestamp(date_in)
 
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
-    
-    # Recalculate ash gen
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
     net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
     remaining_cap_tons = pond_cap - net_ash_added
@@ -494,7 +494,7 @@ if not hist_df.empty:
     if daily_net_dump > 0:
         pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
-        pond_days_left = 9999 
+        pond_days_left = 9999
     else:
         pond_days_left = 365
 else:
@@ -677,7 +677,7 @@ with tabs[7]:
         
         filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
         
-        filtered_df['Date_dt'] = pd.to_datetime(filtered_df['Date']).dt.date
+        filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         colors = {'1': '#00ccff', '2': '#ff8c00', '3': '#00ff9d'}
@@ -695,12 +695,74 @@ with tabs[7]:
 # TAB 9: SIMULATOR
 with tabs[8]:
     st.markdown("### 🎮 Simulator")
-    s_vac = st.slider("Target Vacuum", -0.85, -0.99, -0.92)
-    new_loss = (abs(s_vac) - 0.92) * 100 * 15
-    st.metric("Impact", f"{new_loss:.1f} kcal/kWh")
+    
+    # 3x2 Grid for Sliders
+    s_c1, s_c2, s_c3 = st.columns(3)
+    with s_c1:
+        s_vac = st.slider("Vacuum (kg/cm2)", -0.80, -0.99, -0.92, step=0.001)
+        s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
+    with s_c2:
+        s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
+        s_spray = st.slider("Spray (TPH)", 0, 50, 15)
+    with s_c3:
+        s_solar = st.slider("Solar Impact (MU)", 0.0, 0.1, 0.0)
+        s_bio = st.slider("Biomass (%)", 0, 20, 0)
+    
+    # Simulation Logic
+    # Base HR = 2250.
+    # Vac Impact: 15 kcal per 0.01 deviation from -0.92
+    sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 # Negative because higher vac (more neg) is better
+    
+    # MS Temp Impact: 0.7 kcal per deg deviation from 540
+    sim_ms_loss = (540 - s_ms) * 0.7
+    
+    # FG Temp Impact: 1 kcal per 2 deg deviation from 130
+    sim_fg_loss = (s_fg - 130) / 2
+    
+    # Spray Impact: 2 kcal per TPH deviation from 15
+    sim_spray_loss = (s_spray - 15) * 2
+    
+    # Total HR Impact
+    sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss + sim_spray_loss
+    
+    # Financial Impact (Daily for 1 Unit @ 8.4 MU)
+    # 1 kcal/kWh = 1000 * 8.4 / 3500 (approx) tons coal
+    # Profit Impact = HR_Impact * Gen * Cost_Factor
+    # Let's use standard Profit formula derivative:
+    # Delta Profit = ( - Delta HR ) * Gen * 1000
+    sim_daily_profit_impact = (-1 * sim_hr_impact) * 8.4 * 1000 
+    
+    # Solar/Biomass Benefit
+    # Solar: Direct addition to revenue or saving aux power. 
+    # Value = Solar MU * 3 Rs/unit * 1,000,000 / 100,000 (Lacs)
+    sim_solar_save = s_solar * 3 * 10
+    
+    st.divider()
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
+    with r2:
+        st.metric("Daily Profit Impact", f"₹ {sim_daily_profit_impact/100000:.2f} Lac")
+    with r3:
+        st.metric("Green Saving", f"₹ {sim_solar_save:.2f} Lac")
 
 # TAB 10: INFO
 with tabs[9]:
-    try: st.image("1000051705.jpg", use_container_width=True)
-    except: pass
-    st.markdown("### 5S Pillars: Sort, Set in Order, Shine, Standardize, Sustain")
+    st.markdown("### 📚 Knowledge Base & Formulas")
+    
+    with st.expander("💰 Profit Calculation"):
+        st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
+        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
+        
+    with st.expander("🪨 Ash Pond Logic"):
+        st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
+        st.write("Capacity is fixed. Net accumulation reduces remaining space. If Utilization > Generation, space increases.")
+        
+    with st.expander("🏆 5S Score Logic"):
+        st.write("Score starts at 100 and is penalized for deviations:")
+        st.latex(r"Penalty = \frac{|Vac_{dev}| + MS_{dev} + FG_{dev} + Spray_{dev}}{3}")
+        st.latex(r"Score = 100 - Penalty")
+    
+    with st.expander("☀️ Solar & Biomass"):
+        st.write("- **Solar Homes:** 1 MU = 1 Million Units. Avg Home = 1460 Units/Year (~4/day).")
+        st.write("- **Biomass:** 1 kg Biomass ≈ 1.2 kWh Electricity equivalent (avoided coal).")
