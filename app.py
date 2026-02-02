@@ -80,6 +80,7 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
+        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
@@ -112,26 +113,42 @@ def load_analytics_state(repo):
         return default_data, None
 
 def save_analytics_state(repo, data):
-    # FIXED: Fetch latest SHA before saving to avoid 409 Conflict
     if not repo: return False
     try:
+        # ALWAYS fetch latest SHA before saving to avoid 409 Conflict
         try:
             file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
             repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
         except:
             repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"GitHub Save Error: {e}")
+        return False
 
-# --- ROBUST PARSERS ---
+# --- UNIVERSAL PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
-        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+        # Load raw to find header
+        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
+        
+        # SMART SEARCH: Find row with "Species" or "Pongamia" or "Financial Year"
+        header_idx = 0
+        for i, row in df_raw.iterrows():
+            s = row.astype(str).str.lower().tolist()
+            if any("pongamia" in x for x in s) or any("financial year" in x for x in s):
+                header_idx = i
+                break
+        
+        df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
         df.columns = [str(c).strip() for c in df.columns]
-        year_col = next((c for c in df.columns if "Year" in str(c)), None)
+        
+        # Identify Year Column
+        year_col = next((c for c in df.columns if "year" in str(c).lower()), None)
         if not year_col: return []
         
-        exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate']
+        # Identify Species Columns (Exclude metadata)
+        exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed']
         species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
         
         records = []
@@ -149,6 +166,7 @@ def parse_plantation_file(uploaded_file):
 
 def parse_ash_file(uploaded_file):
     try:
+        # SMART SEARCH: Find header with "Month" and "Utilization"
         df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
         header_idx = 0
         for i, row in df_raw.iterrows():
@@ -160,28 +178,38 @@ def parse_ash_file(uploaded_file):
         df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
         
         col_map = {}
+        # Dynamic Mapping
         for c in df.columns:
             cl = str(c).lower()
             if "month" in cl: col_map['Month'] = c
             elif "generation" in cl and "ash" in cl: col_map['Generation'] = c
             elif "utilized" in cl and "ash" in cl: col_map['Utilization'] = c
+            # Map Utilization Areas (Everything else is a potential area)
             elif "brick" in cl: col_map['Bricks'] = c
             elif "cement" in cl: col_map['Cement'] = c
             elif "dyke" in cl: col_map['Dyke'] = c
-            elif "road" in cl: col_map['Roads'] = c
-            elif "mine" in cl: col_map['Mines'] = c
+            elif "road" in cl: col_map['Road Embankment'] = c
+            elif "mine" in cl: col_map['Mine Filling'] = c
             elif "reclaimation" in cl: col_map['Reclamation'] = c
+            elif "agriculture" in cl: col_map['Agriculture'] = c
+            elif "hydro" in cl: col_map['Hydro'] = c
         
         final_data = []
         for _, row in df.iterrows():
             if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
             record = {}
-            for k, v in col_map.items():
-                val = row[v]
-                if k != 'Month':
-                    try: val = float(val)
+            # Base Keys
+            record['Month'] = row[col_map.get('Month')]
+            record['Generation'] = row.get(col_map.get('Generation'), 0)
+            record['Utilization'] = row.get(col_map.get('Utilization'), 0)
+            
+            # Dynamic Areas
+            for std_key, col_name in col_map.items():
+                if std_key not in ['Month', 'Generation', 'Utilization']:
+                    try: val = float(row[col_name])
                     except: val = 0.0
-                record[k] = val
+                    record[std_key] = val
+            
             final_data.append(record)
             
         return final_data
@@ -385,16 +413,16 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_raw'] = ash_parsed
-                    save_analytics_state(repo, analytics_state)
-                    st.success("Ash Data Saved!")
-                    st.rerun()
+                    if save_analytics_state(repo, analytics_state):
+                        st.success("Ash Data Saved!")
+                        st.rerun()
             elif "plantation" in supp_file.name.lower():
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt_raw'] = plant_parsed
-                    save_analytics_state(repo, analytics_state)
-                    st.success("Plantation Data Saved!")
-                    st.rerun()
+                    if save_analytics_state(repo, analytics_state):
+                        st.success("Plantation Data Saved!")
+                        st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
@@ -488,17 +516,17 @@ date_in_ts = pd.Timestamp(date_in)
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    current_capacity_tons = pond_cap - cumulative_net_added_tons
+    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
+    remaining_cap_tons = pond_cap - net_ash_added
     daily_net_dump = fleet_ash_gen - fleet_ash_util
     if daily_net_dump > 0:
-        pond_days_left = current_capacity_tons / daily_net_dump
+        pond_days_left = remaining_cap_tons / daily_net_dump
     elif daily_net_dump < 0:
         pond_days_left = 9999 
     else:
         pond_days_left = 365
 else:
-    current_capacity_tons = pond_cap
+    remaining_cap_tons = pond_cap
     pond_days_left = 365
 
 total_bio = bio_u1 + bio_u2 + bio_u3
@@ -584,7 +612,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
             <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -599,6 +627,9 @@ with tabs[1]:
     **Logic:**
     * **SOx/NOx:** Real-time stack monitoring data.
     * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
+    
+    **Formulas:**
+    * $$Virtual\_Trees = \frac{Total\_Plant\_Emissions}{0.025 \text{ (CO2 absorbed per tree)}}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -610,6 +641,7 @@ with tabs[1]:
         st.markdown("#### 🌳 Greenbelt Reality Check")
         real_trees = 354762
         virtual_trees = green_trees + sum(u['trees'] for u in units_data) if units_data else 0
+        st.info("**Physical:** Actual trees planted. **Virtual:** CO2 reduction converted to 'Tree Equivalent'.")
         c_g1, c_g2 = st.columns(2)
         c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
         c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
@@ -620,6 +652,11 @@ with tabs[2]:
     **Ash Management:**
     * **Generation:** Calculated based on Coal Consumption & Ash %.
     * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
+    * **Burj Khalifa Index:** A fun metric comparing total ash volume to the volume of the Burj Khalifa.
+    
+    **Formulas:**
+    * $$Ash\_Gen = Coal\_Cons \times Ash\%$$
+    * $$Burj\_Index = \frac{Ash\_Volume}{Burj\_Volume}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -641,32 +678,66 @@ with tabs[3]:
     **Green Power Impact:**
     * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
     * **Solar:** Captive solar power reducing auxiliary consumption.
+    
+    **Equivalency:**
+    * $$Homes\_Powered = \frac{Renewable\_Units}{4 \text{ (Avg Daily Consumption)}}$$
     """)
     st.markdown("#### ⚡ Green Power Impact")
+    
+    # GLASS CARDS FOR RENEWABLES
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card border-green">
+            <div class="unit-header">BIOMASS</div>
+            <div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div>
+            <div class="sub-lbl">CO2 Saved Today</div>
+            <hr style="border-color:#ffffff33;">
+            <div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div>
+            <div class="sub-lbl">Homes Powered</div>
+        </div>""", unsafe_allow_html=True)
+        
     with c2:
-        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card border-solar">
+            <div class="unit-header">SOLAR</div>
+            <div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div>
+            <div class="sub-lbl">CO2 Saved Today</div>
+            <hr style="border-color:#ffffff33;">
+            <div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div>
+            <div class="sub-lbl">Homes Powered</div>
+        </div>""", unsafe_allow_html=True)
+        
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
 if units_data:
     for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
         with tab:
+            display_info(r"""
+            **Unit Performance:**
+            * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
+            * **5S Score:** Technical hygiene score based on parameter adherence.
+            
+            **Loss Formulas (Approx):**
+            * Vacuum: 15 kcal/kWh per 0.01 deviation.
+            * MS Temp: 0.7 kcal/kWh per degree deviation.
+            """)
             u = units_data[i]
             render_unit_detail(u, configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis.")
+    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
         cutoff_ts = pd.Timestamp(cutoff)
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
-        filtered_df = filtered_df[filtered_df['HR'] > 100]
+        
+        filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
+        
         filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -687,32 +758,53 @@ with tabs[8]:
     st.markdown("### 🎮 Simulator")
     display_info(r"""
     **Simulation Logic:**
+    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
     * **Vacuum:** Lower (more negative) is better.
-    * **APC:** Auxiliary Power Consumption.
+    * **APC:** Auxiliary Power Consumption directly reduces salable power.
+    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
     """)
+    
+    # 3x2 Grid for Sliders
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
         s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
-        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1)
+        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1, help="Aux Power Cons. Standard: 6.5%")
     with s_c3:
         s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
+    
+    # Simulation Logic
+    # Base HR = 2250.
     sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
     sim_fg_loss = (s_fg - 130) / 2
+    
+    # Total HR Impact
     sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
+    
+    # Financial Impact (Daily for 1 Unit @ 8.4 MU)
+    # Profit Impact = HR Impact + APC Impact + GCV Cost
+    # APC Impact: 1% increase = 1% loss of revenue
+    # Revenue/day = 8.4 MU * 10^6 * 3 Rs = 2.52 Cr
     base_revenue = 25200000 
     sim_apc_loss = base_revenue * ((s_apc - 6.5)/100) * -1
+    
+    # HR Profit Impact
     sim_hr_profit = (-1 * sim_hr_impact) * 8.4 * 1000
+    
     total_sim_impact = sim_hr_profit + sim_apc_loss
+    
     st.divider()
     r1, r2, r3 = st.columns(3)
-    with r1: st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
-    with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
-    with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
+    with r1:
+        st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
+    with r2:
+        st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
+    with r3:
+        st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
 # TAB 10: ANALYTICS (IMPROVED)
 with tabs[9]:
@@ -780,7 +872,9 @@ with tabs[9]:
                 st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
                 
             # Stacked Area Chart (Dynamic)
-            avail_cols = [c for c in ['Bricks', 'Cement', 'Dyke', 'Mines', 'Roads', 'Reclamation'] if c in df_ash.columns]
+            # Find any column that looks like a utilization avenue (not Month/Gen/Total)
+            ignore = ['month', 'generation', 'utilization', 'simulated_total']
+            avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
             
             fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
             
