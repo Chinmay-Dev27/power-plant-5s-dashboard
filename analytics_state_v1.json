@@ -1,1 +1,17 @@
-{"greenbelt": {"total_planted": 407010, "matured": 394180, "survival_rate": 90, "net_available": 354762, "ghg_removal": 8869.05, "species": {"Pongamia": 19074, "Neem": 102604, "Kadamba": 36127, "Teak": 15000, "Bamboo": 50000, "Alstonia": 14215, "Peltophorrum": 13224, "Mango": 3500, "Guava": 3549, "Ashoka": 3000, "Others": 146717}}, "ash_analytics": {"Month": ["APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT"], "Generation": [2.42, 2.45, 2.27, 1.87, 2.1, 2.3, 2.4], "Utilization": [2.42, 2.45, 2.27, 1.87, 2.1, 2.3, 2.4], "Bricks": [0.79, 0.84, 0.68, 0.62, 0.7, 0.75, 0.8], "Cement": [0.78, 0.78, 0.66, 0.5, 0.65, 0.7, 0.75], "Dyke": [0.84, 0.83, 0.92, 0.75, 0.75, 0.85, 0.85]}, "ash_raw": [{"Month": "Year: 2025-26"}, {"Month": "Sr. No."}, {"Month": 1}, {"Month": 2}, {"Month": 3}, {"Month": 4}, {"Month": 5}, {"Month": 6}, {"Month": 7}, {"Month": 8}, {"Month": 9}, {"Month": 10}, {"Month": 11}, {"Month": 12}, {"Month": "TOTAL"}]}
+{
+  "greenbelt": [
+    {"Year": "2014-15", "Species": "Neem", "Count": 15000},
+    {"Year": "2014-15", "Species": "Teak", "Count": 5000},
+    {"Year": "2015-16", "Species": "Pongamia", "Count": 12000},
+    {"Year": "2016-17", "Species": "Bamboo", "Count": 25000},
+    {"Year": "2017-18", "Species": "Kadamba", "Count": 8000},
+    {"Year": "2018-19", "Species": "Cheeku", "Count": 200},
+    {"Year": "2019-20", "Species": "Guava", "Count": 350}
+  ],
+  "ash_raw": [
+    {"Month": "APR", "Generation": 2.42, "Utilization": 2.42, "Bricks": 0.79, "Cement": 0.78, "Dyke": 0.84, "Mines": 0.0, "Roads": 0.0, "Reclamation": 0.0},
+    {"Month": "MAY", "Generation": 2.45, "Utilization": 2.45, "Bricks": 0.84, "Cement": 0.78, "Dyke": 0.83, "Mines": 0.0, "Roads": 0.0, "Reclamation": 0.0},
+    {"Month": "JUN", "Generation": 2.27, "Utilization": 2.27, "Bricks": 0.68, "Cement": 0.66, "Dyke": 0.92, "Mines": 0.0, "Roads": 0.0, "Reclamation": 0.0},
+    {"Month": "JUL", "Generation": 1.87, "Utilization": 1.87, "Bricks": 0.62, "Cement": 0.50, "Dyke": 0.75, "Mines": 0.0, "Roads": 0.0, "Reclamation": 0.0}
+  ]
+}
