@@ -119,10 +119,10 @@ def save_analytics_state(repo, data, sha):
         return True
     except: return False
 
-# --- UNIVERSAL PARSERS (UPDATED FOR I5:BH26) ---
+# --- PRECISION PARSERS (I5:BH26 Focused) ---
 def parse_plantation_file(uploaded_file):
     try:
-        # Load header at row 5 (index 4)
+        # Load header at row 5 (index 4) which contains Year and Species
         df = pd.read_excel(uploaded_file, header=4) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=4)
         
         # Clean column names
@@ -132,29 +132,26 @@ def parse_plantation_file(uploaded_file):
         year_col = next((c for c in df.columns if "Year" in c), None)
         if not year_col: return []
         
-        # Get start index of "Financial Year"
-        start_idx = df.columns.get_loc(year_col)
-        
         # Identify columns to keep (From I to BH approx)
-        # We look for numeric columns to the right of Year
-        valid_species_cols = []
+        # We look for numeric columns to the right of Year that are NOT metadata
         exclude = ['Total', 'Survival', 'Remarks', 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed', 'Sl. No']
-        
-        for c in df.columns[start_idx+1:]:
-            if not any(x.lower() in str(c).lower() for x in exclude):
-                valid_species_cols.append(c)
+        valid_species_cols = [c for c in df.columns if not any(x.lower() in str(c).lower() for x in exclude) and c != year_col]
         
         records = []
         for _, row in df.iterrows():
             yr = row[year_col]
-            # Stop if we hit "Total" row or empty year
-            if pd.isna(yr) or 'total' in str(yr).lower(): continue
+            # Stop if we hit "Total" row or empty year or "Matured" summary rows
+            if pd.isna(yr) or any(x in str(yr).lower() for x in ['total', 'matured', 'mortality']): continue
             
             for sp in valid_species_cols:
                 planted = row[sp]
                 if pd.notna(planted) and isinstance(planted, (int, float)) and planted > 0:
-                    # Estimating Matured/Survival if not explicit in row (Assuming 90% survival per your snippet)
-                    matured = int(planted * 0.9)
+                    # Logic: If 'Matured' data isn't explicitly in the cell (it's usually separate rows in this sheet format),
+                    # we estimate it or look for the corresponding Matured row.
+                    # For simplicity and robustness with single-table parsing:
+                    # We assume 90% survival if explicit matured data isn't joined.
+                    matured = int(planted * 0.9) 
+                    
                     records.append({
                         'Year': str(yr).strip(),
                         'Species': str(sp).strip(),
@@ -617,6 +614,9 @@ with tabs[1]:
     **Logic:**
     * **SOx/NOx:** Real-time stack monitoring data.
     * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
+    
+    **Formulas:**
+    * $$Virtual\_Trees = \frac{Total\_Plant\_Emissions}{0.025 \text{ (CO2 absorbed per tree)}}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -638,6 +638,11 @@ with tabs[2]:
     **Ash Management:**
     * **Generation:** Calculated based on Coal Consumption & Ash %.
     * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
+    * **Burj Khalifa Index:** A fun metric comparing total ash volume to the volume of the Burj Khalifa.
+    
+    **Formulas:**
+    * $$Ash\_Gen = Coal\_Cons \times Ash\%$$
+    * $$Burj\_Index = \frac{Ash\_Volume}{Burj\_Volume}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -659,32 +664,66 @@ with tabs[3]:
     **Green Power Impact:**
     * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
     * **Solar:** Captive solar power reducing auxiliary consumption.
+    
+    **Equivalency:**
+    * $$Homes\_Powered = \frac{Renewable\_Units}{4 \text{ (Avg Daily Consumption)}}$$
     """)
     st.markdown("#### ⚡ Green Power Impact")
+    
+    # GLASS CARDS FOR RENEWABLES
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card border-green">
+            <div class="unit-header">BIOMASS</div>
+            <div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div>
+            <div class="sub-lbl">CO2 Saved Today</div>
+            <hr style="border-color:#ffffff33;">
+            <div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div>
+            <div class="sub-lbl">Homes Powered</div>
+        </div>""", unsafe_allow_html=True)
+        
     with c2:
-        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card border-solar">
+            <div class="unit-header">SOLAR</div>
+            <div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div>
+            <div class="sub-lbl">CO2 Saved Today</div>
+            <hr style="border-color:#ffffff33;">
+            <div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div>
+            <div class="sub-lbl">Homes Powered</div>
+        </div>""", unsafe_allow_html=True)
+        
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
 if units_data:
     for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
         with tab:
+            display_info(r"""
+            **Unit Performance:**
+            * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
+            * **5S Score:** Technical hygiene score based on parameter adherence.
+            
+            **Loss Formulas (Approx):**
+            * Vacuum: 15 kcal/kWh per 0.01 deviation.
+            * MS Temp: 0.7 kcal/kWh per degree deviation.
+            """)
             u = units_data[i]
             render_unit_detail(u, configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis.")
+    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
         cutoff_ts = pd.Timestamp(cutoff)
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
-        filtered_df = filtered_df[filtered_df['HR'] > 100]
+        
+        filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
+        
         filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -705,34 +744,55 @@ with tabs[8]:
     st.markdown("### 🎮 Simulator")
     display_info(r"""
     **Simulation Logic:**
+    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
     * **Vacuum:** Lower (more negative) is better.
-    * **APC:** Auxiliary Power Consumption.
+    * **APC:** Auxiliary Power Consumption directly reduces salable power.
+    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
     """)
+    
+    # 3x2 Grid for Sliders
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
         s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
-        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1)
+        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1, help="Aux Power Cons. Standard: 6.5%")
     with s_c3:
         s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
+    
+    # Simulation Logic
+    # Base HR = 2250.
     sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
     sim_fg_loss = (s_fg - 130) / 2
+    
+    # Total HR Impact
     sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
+    
+    # Financial Impact (Daily for 1 Unit @ 8.4 MU)
+    # Profit Impact = HR Impact + APC Impact + GCV Cost
+    # APC Impact: 1% increase = 1% loss of revenue
+    # Revenue/day = 8.4 MU * 10^6 * 3 Rs = 2.52 Cr
     base_revenue = 25200000 
     sim_apc_loss = base_revenue * ((s_apc - 6.5)/100) * -1
+    
+    # HR Profit Impact
     sim_hr_profit = (-1 * sim_hr_impact) * 8.4 * 1000
+    
     total_sim_impact = sim_hr_profit + sim_apc_loss
+    
     st.divider()
     r1, r2, r3 = st.columns(3)
-    with r1: st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
-    with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
-    with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
+    with r1:
+        st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
+    with r2:
+        st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
+    with r3:
+        st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
-# TAB 10: ANALYTICS (IMPROVED)
+# TAB 10: ANALYTICS (NEW & IMPROVED)
 with tabs[9]:
     st.markdown("### 📊 Interactive Analytics Playground")
     
@@ -775,19 +835,28 @@ with tabs[9]:
         
         st.divider()
         
-        # 4. CHARTS ROW 1 (PIE CHARTS)
-        p1, p2 = st.columns(2)
-        with p1:
-            fig_mix = px.pie(df_yr, values='Planted', names='Species', title=f"Planted Mix ({sel_year})", hole=0.4, template='plotly_dark')
-            st.plotly_chart(fig_mix, use_container_width=True)
-        with p2:
-            # Create a "Survival Grid" - Mini Pies for each species
-            # We use a bar chart instead for cleaner comparison of survival vs death per species
-            df_melt = df_yr.melt(id_vars='Species', value_vars=['Matured', 'Planted'], var_name='Status', value_name='Count')
-            # Calculate Dead
-            df_yr['Dead'] = df_yr['Planted'] - df_yr['Matured']
-            fig_surv = px.bar(df_yr, x='Species', y=['Matured', 'Dead'], title="Survival vs Mortality by Species", barmode='stack', color_discrete_sequence=['#00ff88', '#ff3333'], template='plotly_dark')
-            st.plotly_chart(fig_surv, use_container_width=True)
+        # 4. SURVIVAL GRID (Multiple Donuts)
+        st.markdown("#### Species Survival Grid")
+        if not df_yr.empty:
+            # We create a grid of donut charts for each species
+            rows = (len(df_yr) // 4) + 1
+            fig_grid = make_subplots(rows=rows, cols=4, specs=[[{'type':'domain'}]*4]*rows, subplot_titles=df_yr['Species'].tolist())
+            
+            for i, row in enumerate(df_yr.itertuples()):
+                r = (i // 4) + 1
+                c = (i % 4) + 1
+                fig_grid.add_trace(go.Pie(
+                    labels=['Alive', 'Dead'], 
+                    values=[row.Matured, row.Planted - row.Matured],
+                    name=row.Species,
+                    hole=0.6,
+                    marker_colors=['#00ff88', '#ff3333']
+                ), row=r, col=c)
+            
+            fig_grid.update_layout(height=rows*250, margin=dict(t=30, b=0, l=0, r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_grid, use_container_width=True)
+        else:
+            st.warning("No data for selected filter.")
 
         # 5. HEATMAP (Dynamic)
         st.markdown("#### 🌡️ Plantation Heatmap")
