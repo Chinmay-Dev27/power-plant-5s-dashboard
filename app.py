@@ -189,6 +189,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
+    
+    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -403,7 +405,7 @@ with st.sidebar:
         t_u1 = st.number_input("U1 Target HR", 2300); g_u1 = st.number_input("U1 GCV", 3600)
         t_u2 = st.number_input("U2 Target HR", 2310); g_u2 = st.number_input("U2 GCV", 3550)
         t_u3 = st.number_input("U3 Target HR", 2295); g_u3 = st.number_input("U3 GCV", 3620)
-        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Cap", 500000); pond_curr = st.number_input("Pond Stock", 350000)
+        coal_ash = st.number_input("Ash %", 35.0); pond_cap = st.number_input("Pond Max Cap", 500000, help="Total Capacity in Tons"); pond_curr = st.number_input("Pond Stock", 350000)
         
     with tab_inp:
         configs = [{'target_hr': t_u1, 'gcv': g_u1, 'limits':{'sox':lim_sox, 'nox':lim_nox}}, 
@@ -469,28 +471,41 @@ fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data els
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
 # ASH POND CUMULATIVE LOGIC
-# Fix for TypeError: Use proper timestamp comparison
+# Logic: Capacity decreases if we dump more than utilize. Increases if we remove more.
 pond_days_calc = 365.0
 date_in_ts = pd.Timestamp(date_in)
 
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     
-    # Recalculate ash gen
+    # Re-calculate Ash Generation from History (approx)
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    remaining_cap_tons = pond_cap - net_ash_added
+    
+    # Net Ash Added to Pond (Generation - Utilization)
+    # If Gen > Util -> Positive (Filling up)
+    # If Util > Gen -> Negative (Emptying)
+    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
+    
+    # Remaining Capacity = Max Cap - Net Added
+    current_capacity_tons = pond_cap - cumulative_net_added_tons
+    
+    # Daily Net Dump Rate (Today)
     daily_net_dump = fleet_ash_gen - fleet_ash_util
     
+    # Days Left Calculation
     if daily_net_dump > 0:
-        pond_days_left = remaining_cap_tons / daily_net_dump
+        # We are filling up. How long until full?
+        pond_days_left = current_capacity_tons / daily_net_dump
     elif daily_net_dump < 0:
+        # We are emptying. Days left is effectively infinite/increasing.
         pond_days_left = 9999 
     else:
+        # Stable
         pond_days_left = 365
 else:
+    # Default
+    current_capacity_tons = pond_cap
     pond_days_left = 365
-    remaining_cap_tons = pond_cap
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -567,7 +582,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
             <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
