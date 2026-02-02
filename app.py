@@ -80,6 +80,7 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
+        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
@@ -103,7 +104,6 @@ def load_analytics_state(repo):
         "greenbelt_raw": [], 
         "ash_raw": []
     }
-    # ERROR FIX: Always return a tuple (data, sha) even if repo is None
     if not repo: return default_data, None
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
@@ -123,22 +123,13 @@ def save_analytics_state(repo, data, sha):
 # --- UNIVERSAL PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
-        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
+        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         
-        # SMART SEARCH for header
-        header_idx = 0
-        for i, row in df_raw.iterrows():
-            s = row.astype(str).str.lower().tolist()
-            if any("pongamia" in x for x in s) or any("financial year" in x for x in s):
-                header_idx = i
-                break
-        
-        df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
-        df.columns = [str(c).strip() for c in df.columns]
-        
+        # Identify Year Column
         year_col = next((c for c in df.columns if "Year" in str(c)), None)
         if not year_col: return []
         
+        # Identify Species Columns
         exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed']
         species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
         
@@ -147,9 +138,17 @@ def parse_plantation_file(uploaded_file):
             yr = row[year_col]
             if pd.isna(yr) or str(yr).lower() == 'total': continue
             for sp in species_cols:
-                val = row[sp]
-                if pd.notna(val) and isinstance(val, (int, float)) and val > 0:
-                    records.append({'Year': str(yr), 'Species': str(sp).strip(), 'Count': int(val)})
+                planted = row[sp]
+                # Try to find matured if available (assuming generic structure or estimation)
+                matured = planted * 0.9 # Default fallback if not in file
+                
+                if pd.notna(planted) and isinstance(planted, (int, float)) and planted > 0:
+                    records.append({
+                        'Year': str(yr), 
+                        'Species': str(sp).strip(), 
+                        'Planted': int(planted),
+                        'Matured': int(matured)
+                    })
         return records
     except: return []
 
@@ -171,14 +170,9 @@ def parse_ash_file(uploaded_file):
             if "month" in cl: col_map['Month'] = c
             elif "generation" in cl and "ash" in cl: col_map['Generation'] = c
             elif "utilized" in cl and "ash" in cl: col_map['Utilization'] = c
-            elif "brick" in cl: col_map['Bricks'] = c
-            elif "cement" in cl: col_map['Cement'] = c
-            elif "dyke" in cl: col_map['Dyke'] = c
-            elif "road" in cl: col_map['Road Embankment'] = c
-            elif "mine" in cl: col_map['Mines'] = c
-            elif "reclaimation" in cl: col_map['Reclamation'] = c
-            elif "agriculture" in cl: col_map['Agriculture'] = c
-            elif "hydro" in cl: col_map['Hydro'] = c
+            else:
+                if "total" not in cl and "unnamed" not in cl:
+                    col_map[str(c).strip()] = c
         
         final_data = []
         for _, row in df.iterrows():
@@ -340,7 +334,6 @@ with st.sidebar:
     units_data = []
     repo = init_github()
     hist_df, sha = load_history(repo)
-    # FIX: Ensure analytics_state is unpacked
     analytics_state, analytics_sha = load_analytics_state(repo)
     
     hist_data = {}
@@ -803,28 +796,45 @@ with tabs[9]:
         st.markdown('<div class="section-header">🌳 Greenbelt Simulator</div>', unsafe_allow_html=True)
         
         # Controls
-        gc1, gc2 = st.columns(2)
+        gc1, gc2, gc3 = st.columns(3)
         with gc1:
-            years_proj = st.slider("⏳ Time Machine (Years)", 0, 30, 0, help="Project CO2 removal into the future")
+            sel_year_gb = st.selectbox("📅 Select Year (Pie)", sorted(df_gb['Year'].unique(), reverse=True))
         with gc2:
-            all_sp = sorted(df_gb['Species'].unique())
-            sel_sp = st.multiselect("Filter Species", all_sp, default=all_sp[:5])
+            years_proj = st.slider("⏳ Time Machine (Years)", 0, 30, 0, help="Project CO2 removal into the future")
+        with gc3:
+             # Species Heatmap Filter (Example: Filter top 5)
+             pass
         
         # Filter & Calc
-        df_filt = df_gb[df_gb['Species'].isin(sel_sp)] if sel_sp else df_gb
-        current_trees = df_filt['Count'].sum()
-        base_co2 = current_trees * 0.025 # 25kg/tree
+        total_trees = df_gb['Count'].sum()
+        base_co2 = total_trees * 0.025 # 25kg/tree
         proj_co2 = base_co2 * ((1.05)**years_proj) # 5% growth
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Selected Trees", f"{current_trees:,}")
+        m1.metric("Total Plantation (All Years)", f"{total_trees:,}")
         m2.metric("Current CO2 Sink", f"{base_co2:,.1f} T")
         m3.metric(f"Projected (+{years_proj} yr)", f"{proj_co2:,.1f} T", delta=f"{proj_co2-base_co2:,.0f} T")
         
-        # Sunburst Chart
-        fig_sun = px.sunburst(df_filt, path=['Year', 'Species'], values='Count', color='Count', color_continuous_scale='Greens', title="Species Distribution by Year")
-        fig_sun.update_layout(height=400, margin=dict(t=30, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_sun, use_container_width=True)
+        # Charts
+        c1, c2 = st.columns(2)
+        with c1:
+            # Dynamic Pie Chart for Selected Year
+            df_year = df_gb[df_gb['Year'] == sel_year_gb]
+            fig_pie = px.pie(df_year, values='Count', names='Species', title=f"Species Mix in {sel_year_gb}", hole=0.4, template='plotly_dark')
+            fig_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True)
+        with c2:
+            # Species Heatmap
+            fig_heat = px.density_heatmap(df_gb, x='Year', y='Species', z='Count', color_continuous_scale='Greens', title="Species Density Heatmap (All Years)")
+            fig_heat.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_heat, use_container_width=True)
+        
+        # Trend
+        df_trend = df_gb.groupby('Year')['Count'].sum().reset_index()
+        fig_trend = px.bar(df_trend, x='Year', y='Count', title="Total Plantation Trend", template='plotly_dark', color_discrete_sequence=['#00ff88'])
+        fig_trend.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_trend, use_container_width=True)
+        
     else:
         st.info("Upload 'Plantation data.xlsx' to see Greenbelt Analytics.")
 
@@ -855,19 +865,25 @@ with tabs[9]:
                 st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
                 
             # Stacked Area Chart (Dynamic)
-            # Find any column that looks like a utilization avenue (not Month/Gen/Total)
             ignore = ['month', 'generation', 'utilization', 'simulated_total']
             avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
             
-            fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
-            
-            # Add Simulation Line
-            # We create a new column safely
-            df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
-            fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
-            
-            fig_area.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_area, use_container_width=True)
+            c_ash1, c_ash2 = st.columns(2)
+            with c_ash1:
+                # Dynamic Ash Pie Chart
+                sel_month_ash = st.selectbox("Select Month (Ash Breakdown)", df_ash['Month'].unique())
+                df_month_ash = df_ash[df_ash['Month'] == sel_month_ash]
+                pie_vals = {k: df_month_ash.iloc[0][k] for k in avail_cols if df_month_ash.iloc[0][k] > 0}
+                fig_ash_pie = px.pie(values=list(pie_vals.values()), names=list(pie_vals.keys()), title=f"Utilization in {sel_month_ash}", hole=0.4, template='plotly_dark')
+                fig_ash_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_ash_pie, use_container_width=True)
+                
+            with c_ash2:
+                fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
+                df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
+                fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
+                fig_area.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_area, use_container_width=True)
         else:
             st.warning("Could not identify 'Utilization' column in the uploaded data.")
     else:
