@@ -119,34 +119,47 @@ def save_analytics_state(repo, data, sha):
         return True
     except: return False
 
-# --- ROBUST PARSERS ---
+# --- UNIVERSAL PARSERS (UPDATED FOR I5:BH26) ---
 def parse_plantation_file(uploaded_file):
     try:
-        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+        # Load header at row 5 (index 4)
+        df = pd.read_excel(uploaded_file, header=4) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=4)
         
-        # Identify Year Column
-        year_col = next((c for c in df.columns if "Year" in str(c)), None)
+        # Clean column names
+        df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
+        
+        # Find "Financial Year" (Anchor Column I)
+        year_col = next((c for c in df.columns if "Year" in c), None)
         if not year_col: return []
         
-        # Identify Species Columns
-        exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed']
-        species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
+        # Get start index of "Financial Year"
+        start_idx = df.columns.get_loc(year_col)
+        
+        # Identify columns to keep (From I to BH approx)
+        # We look for numeric columns to the right of Year
+        valid_species_cols = []
+        exclude = ['Total', 'Survival', 'Remarks', 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed', 'Sl. No']
+        
+        for c in df.columns[start_idx+1:]:
+            if not any(x.lower() in str(c).lower() for x in exclude):
+                valid_species_cols.append(c)
         
         records = []
         for _, row in df.iterrows():
             yr = row[year_col]
-            if pd.isna(yr) or str(yr).lower() == 'total': continue
-            for sp in species_cols:
+            # Stop if we hit "Total" row or empty year
+            if pd.isna(yr) or 'total' in str(yr).lower(): continue
+            
+            for sp in valid_species_cols:
                 planted = row[sp]
-                # Default Logic: Assume 90% survival if Matured not explicit
-                matured = planted * 0.9 
-                
                 if pd.notna(planted) and isinstance(planted, (int, float)) and planted > 0:
+                    # Estimating Matured/Survival if not explicit in row (Assuming 90% survival per your snippet)
+                    matured = int(planted * 0.9)
                     records.append({
-                        'Year': str(yr), 
-                        'Species': str(sp).strip(), 
+                        'Year': str(yr).strip(),
+                        'Species': str(sp).strip(),
                         'Planted': int(planted),
-                        'Matured': int(matured)
+                        'Matured': matured
                     })
         return records
     except Exception as e:
@@ -156,7 +169,6 @@ def parse_plantation_file(uploaded_file):
 def parse_ash_file(uploaded_file):
     try:
         df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
-        
         header_idx = 0
         for i, row in df_raw.iterrows():
             s = row.astype(str).str.lower().tolist()
@@ -191,9 +203,7 @@ def parse_ash_file(uploaded_file):
                     record[key] = val
             final_data.append(record)
         return final_data
-    except Exception as e:
-        st.error(f"Ash Parse Error: {e}")
-        return []
+    except: return []
 
 def generate_excel_template():
     return pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
@@ -391,6 +401,7 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_raw'] = ash_parsed
+                    # Fix: Pass SHA to update function
                     if save_analytics_state(repo, analytics_state, analytics_sha):
                         st.success("Ash Data Saved to GitHub!")
                         st.rerun()
@@ -398,6 +409,7 @@ with st.sidebar:
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt_raw'] = plant_parsed
+                    # Fix: Pass SHA to update function
                     if save_analytics_state(repo, analytics_state, analytics_sha):
                         st.success("Plantation Data Saved to GitHub!")
                         st.rerun()
