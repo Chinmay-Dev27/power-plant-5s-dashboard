@@ -18,7 +18,6 @@
     {"Month": "MAY", "Generation": 2.45, "Utilization": 2.45, "Bricks": 0.84, "Cement": 0.78, "Dyke": 0.83, "Road Embankment": 0.0, "Mines": 0.0},
     {"Month": "JUN", "Generation": 2.27, "Utilization": 2.27, "Bricks": 0.68, "Cement": 0.66, "Dyke": 0.92, "Road Embankment": 0.01, "Mines": 0.0},
     {"Month": "JUL", "Generation": 1.87, "Utilization": 1.87, "Bricks": 0.62, "Cement": 0.50, "Dyke": 0.75, "Road Embankment": 0.0, "Mines": 0.0},
-    {"Month": "AUG", "Generation": 2.10, "Utilization": 2.10, "Bricks": 0.70, "Cement": 0.65, "Dyke": 0.75, "Road Embankment": 0.0, "Mines": 0.0},
-    {"Month": "SEP", "Generation": 2.30, "Utilization": 2.30, "Bricks": 0.75, "Cement": 0.70, "Dyke": 0.85, "Road Embankment": 0.0, "Mines": 0.0}
+    {"Month": "AUG", "Generation": 2.10, "Utilization": 2.10, "Bricks": 0.70, "Cement": 0.65, "Dyke": 0.75, "Road Embankment": 0.0, "Mines": 0.0}
   ]
 }
