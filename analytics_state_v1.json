@@ -1,22 +1,452 @@
 {
-  "greenbelt_raw": [
-    {"Year": "2014-15", "Species": "Neem", "Planted": 15000, "Matured": 13500},
-    {"Year": "2014-15", "Species": "Teak", "Planted": 5000, "Matured": 4500},
-    {"Year": "2015-16", "Species": "Pongamia", "Planted": 12000, "Matured": 10800},
-    {"Year": "2016-17", "Species": "Bamboo", "Planted": 25000, "Matured": 22500},
-    {"Year": "2017-18", "Species": "Cheeku", "Planted": 500, "Matured": 450},
-    {"Year": "2017-18", "Species": "Guava", "Planted": 600, "Matured": 540},
-    {"Year": "2018-19", "Species": "Kadamba", "Planted": 8000, "Matured": 7200},
-    {"Year": "2019-20", "Species": "Mango", "Planted": 1500, "Matured": 1350},
-    {"Year": "2020-21", "Species": "Ashoka", "Planted": 2000, "Matured": 1800},
-    {"Year": "2021-22", "Species": "Alstonia", "Planted": 3000, "Matured": 2700},
-    {"Year": "2022-23", "Species": "Mixed", "Planted": 45000, "Matured": 40500},
-    {"Year": "2023-24", "Species": "Mixed", "Planted": 50000, "Matured": 45000}
-  ],
-  "ash_raw": [
-    {"Month": "APR", "Generation": 2.42, "Utilization": 2.42, "Bricks": 0.79, "Cement": 0.78, "Dyke": 0.84, "Road Embankment": 0.01, "Mines": 0.0},
-    {"Month": "MAY", "Generation": 2.45, "Utilization": 2.45, "Bricks": 0.84, "Cement": 0.78, "Dyke": 0.83, "Road Embankment": 0.0, "Mines": 0.0},
-    {"Month": "JUN", "Generation": 2.27, "Utilization": 2.27, "Bricks": 0.68, "Cement": 0.66, "Dyke": 0.92, "Road Embankment": 0.01, "Mines": 0.0},
-    {"Month": "JUL", "Generation": 1.87, "Utilization": 1.87, "Bricks": 0.62, "Cement": 0.50, "Dyke": 0.75, "Road Embankment": 0.0, "Mines": 0.0}
-  ]
+  "Pongamia pinnata": {
+    "year_wise_plantation": { "2014-15": 6174, "2015-16": 900, "2016-17": 5000, "2017-18": 7000, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 19074,
+    "matured": 19074,
+    "mortality_rate": 0.1,
+    "mature_alive": 17166.6,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 429.165
+  },
+  "Alstonia": {
+    "year_wise_plantation": { "2014-15": 2000, "2015-16": 3500, "2016-17": 4000, "2017-18": 4715, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 14215,
+    "matured": 14215,
+    "mortality_rate": 0.1,
+    "mature_alive": 12793.5,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 319.8375
+  },
+  "Peltophorrum": {
+    "year_wise_plantation": { "2014-15": 3000, "2015-16": 4000, "2016-17": 6224, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 13224,
+    "matured": 13224,
+    "mortality_rate": 0.1,
+    "mature_alive": 11901.6,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 297.54
+  },
+  "Acasia auriculoformis": {
+    "year_wise_plantation": { "2014-15": 10000, "2015-16": 15000, "2016-17": 4401, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 29401,
+    "matured": 29401,
+    "mortality_rate": 0.1,
+    "mature_alive": 26460.9,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 661.5225
+  },
+  "Azdirachta indica": {
+    "year_wise_plantation": { "2014-15": 500, "2015-16": 500, "2016-17": 500, "2017-18": 500, "2018-19": 500, "2019-20": 500, "2020-21": 500, "2021-22": 500, "2022-23": 500, "2023-24": 500, "2024-25": 500 },
+    "total_planted": 5500,
+    "matured": 5000,
+    "mortality_rate": 0.1,
+    "mature_alive": 4500.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 112.5
+  },
+  "Dalbergia sissoo": {
+    "year_wise_plantation": { "2014-15": 1000, "2015-16": 2000, "2016-17": 1500, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 4500,
+    "matured": 4500,
+    "mortality_rate": 0.1,
+    "mature_alive": 4050.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 101.25
+  },
+  "Neem": {
+    "year_wise_plantation": { "2014-15": 20000, "2015-16": 30000, "2016-17": 25000, "2017-18": 15000, "2018-19": 5000, "2019-20": 2000, "2020-21": 1000, "2021-22": 1000, "2022-23": 1000, "2023-24": 1604, "2024-25": 1000 },
+    "total_planted": 102604,
+    "matured": 98000,
+    "mortality_rate": 0.1,
+    "mature_alive": 88200.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 2205.0
+  },
+  "Cassia ceamea": {
+    "year_wise_plantation": { "2014-15": 500, "2015-16": 860, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1360,
+    "matured": 1360,
+    "mortality_rate": 0.1,
+    "mature_alive": 1224.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 30.6
+  },
+  "Kadamba": {
+    "year_wise_plantation": { "2014-15": 5000, "2015-16": 8000, "2016-17": 10000, "2017-18": 8000, "2018-19": 2000, "2019-20": 1000, "2020-21": 500, "2021-22": 500, "2022-23": 500, "2023-24": 627, "2024-25": 0 },
+    "total_planted": 36127,
+    "matured": 34000,
+    "mortality_rate": 0.1,
+    "mature_alive": 30600.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 765.0
+  },
+  "Syzizyum cumini": {
+    "year_wise_plantation": { "2014-15": 500, "2015-16": 1000, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1500,
+    "matured": 1500,
+    "mortality_rate": 0.1,
+    "mature_alive": 1350.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 33.75
+  },
+  "Terminalia cattapa": {
+    "year_wise_plantation": { "2014-15": 200, "2015-16": 300, "2016-17": 400, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 900,
+    "matured": 900,
+    "mortality_rate": 0.1,
+    "mature_alive": 810.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 20.25
+  },
+  "Glemina arborea": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 150, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 250,
+    "matured": 250,
+    "mortality_rate": 0.1,
+    "mature_alive": 225.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 5.625
+  },
+  "Tamaridnicus indica": {
+    "year_wise_plantation": { "2014-15": 50, "2015-16": 50, "2016-17": 100, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 200,
+    "matured": 200,
+    "mortality_rate": 0.1,
+    "mature_alive": 180.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 4.5
+  },
+  "Albizia lebbeck": {
+    "year_wise_plantation": { "2014-15": 300, "2015-16": 300, "2016-17": 400, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1000,
+    "matured": 1000,
+    "mortality_rate": 0.1,
+    "mature_alive": 900.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 22.5
+  },
+  "Mango": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 500, "2016-17": 1000, "2017-18": 500, "2018-19": 200, "2019-20": 200, "2020-21": 200, "2021-22": 200, "2022-23": 200, "2023-24": 500, "2024-25": 0 },
+    "total_planted": 3500,
+    "matured": 3000,
+    "mortality_rate": 0.1,
+    "mature_alive": 2700.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 67.5
+  },
+  "Chikoo": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 500, "2016-17": 1000, "2017-18": 500, "2018-19": 200, "2019-20": 200, "2020-21": 200, "2021-22": 200, "2022-23": 200, "2023-24": 500, "2024-25": 49 },
+    "total_planted": 3549,
+    "matured": 3000,
+    "mortality_rate": 0.1,
+    "mature_alive": 2700.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 67.5
+  },
+  "Guava": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 188, "2016-17": 0, "2017-18": 0, "2018-19": 200, "2019-20": 70, "2020-21": 0, "2021-22": 100, "2022-23": 110, "2023-24": 25, "2024-25": 0 },
+    "total_planted": 693,
+    "matured": 458,
+    "mortality_rate": 0.1,
+    "mature_alive": 412.2,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 10.305
+  },
+  "Cassia fistula": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 100, "2016-17": 100, "2017-18": 100, "2018-19": 83, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 483,
+    "matured": 483,
+    "mortality_rate": 0.1,
+    "mature_alive": 434.7,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 10.8675
+  },
+  "Mimusops elangi": {
+    "year_wise_plantation": { "2014-15": 50, "2015-16": 50, "2016-17": 50, "2017-18": 50, "2018-19": 50, "2019-20": 50, "2020-21": 50, "2021-22": 50, "2022-23": 50, "2023-24": 50, "2024-25": 0 },
+    "total_planted": 500,
+    "matured": 450,
+    "mortality_rate": 0.1,
+    "mature_alive": 405.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 10.125
+  },
+  "Ashoka": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 500, "2018-19": 500, "2019-20": 500, "2020-21": 500, "2021-22": 500, "2022-23": 500, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 3000,
+    "matured": 3000,
+    "mortality_rate": 0.1,
+    "mature_alive": 2700.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 67.5
+  },
+  "Millingtonia hortensis": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 400, "2018-19": 500, "2019-20": 600, "2020-21": 500, "2021-22": 400, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 3000,
+    "matured": 3000,
+    "mortality_rate": 0.1,
+    "mature_alive": 2700.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 67.5
+  },
+  "Spathodea companulata": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 400, "2018-19": 500, "2019-20": 600, "2020-21": 500, "2021-22": 400, "2022-23": 400, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 3400,
+    "matured": 3400,
+    "mortality_rate": 0.1,
+    "mature_alive": 3060.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 76.5
+  },
+  "Tabebuia rosea": {
+    "year_wise_plantation": { "2014-15": 50, "2015-16": 100, "2016-17": 150, "2017-18": 200, "2018-19": 250, "2019-20": 300, "2020-21": 171, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1221,
+    "matured": 1221,
+    "mortality_rate": 0.1,
+    "mature_alive": 1098.9,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 27.4725
+  },
+  "Delonix regia": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 400, "2018-19": 500, "2019-20": 220, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1720,
+    "matured": 1720,
+    "mortality_rate": 0.1,
+    "mature_alive": 1548.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 38.7
+  },
+  "Bougainvillea": {
+    "year_wise_plantation": { "2014-15": 200, "2015-16": 400, "2016-17": 600, "2017-18": 800, "2018-19": 284, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 2284,
+    "matured": 2284,
+    "mortality_rate": 0.1,
+    "mature_alive": 2055.6,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 51.39
+  },
+  "Ceasalpinea": {
+    "year_wise_plantation": { "2014-15": 50, "2015-16": 100, "2016-17": 150, "2017-18": 200, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 500,
+    "matured": 500,
+    "mortality_rate": 0.1,
+    "mature_alive": 450.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 11.25
+  },
+  "Bauhinia alba": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 400, "2018-19": 500, "2019-20": 600, "2020-21": 440, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 2540,
+    "matured": 2540,
+    "mortality_rate": 0.1,
+    "mature_alive": 2286.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 57.15
+  },
+  "Neerium": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 333, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 933,
+    "matured": 933,
+    "mortality_rate": 0.1,
+    "mature_alive": 839.7,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 20.9925
+  },
+  "Murraya": {
+    "year_wise_plantation": { "2014-15": 100, "2015-16": 200, "2016-17": 300, "2017-18": 400, "2018-19": 212, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 1212,
+    "matured": 1212,
+    "mortality_rate": 0.1,
+    "mature_alive": 1090.8,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 27.27
+  },
+  "Thevetia": {
+    "year_wise_plantation": { "2014-15": 1000, "2015-16": 2000, "2016-17": 3000, "2017-18": 4000, "2018-19": 3473, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 13473,
+    "matured": 13473,
+    "mortality_rate": 0.1,
+    "mature_alive": 12125.7,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 303.1425
+  },
+  "Arjun": {
+    "year_wise_plantation": { "2014-15": 500, "2015-16": 1000, "2016-17": 1500, "2017-18": 2000, "2018-19": 1910, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 6910,
+    "matured": 6910,
+    "mortality_rate": 0.1,
+    "mature_alive": 6219.0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 155.475
+  },
+  "Lemon": {
+    "year_wise_plantation": { "2014-15": 50, "2015-16": 100, "2016-17": 150, "2017-18": 200, "2018-19": 250, "2019-20": 127, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 877,
+    "matured": 877,
+    "mortality_rate": 0.1,
+    "mature_alive": 789.3,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 19.7325
+  },
+  "Samania saman": {
+    "year_wise_plantation": { "2014-15": 1000, "2015-16": 2000, "2016-17": 3000, "2017-18": 3876, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 9876,
+    "matured": 9876,
+    "mortality_rate": 0.1,
+    "mature_alive": 8888.4,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 222.21
+  },
+  "Simarouba": {
+    "year_wise_plantation": { "2014-15": 500, "2015-16": 1000, "2016-17": 1611, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 3111,
+    "matured": 3111,
+    "mortality_rate": 0.1,
+    "mature_alive": 2799.9,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 69.9975
+  },
+  "Maulsari": {
+    "year_wise_plantation": { "2014-15": 1000, "2015-16": 2000, "2016-17": 3000, "2017-18": 3809, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 9809,
+    "matured": 9809,
+    "mortality_rate": 0.1,
+    "mature_alive": 8828.1,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 220.7025
+  },
+  "Teak": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 2600, "2023-24": 0, "2024-25": 0 },
+    "total_planted": 2600,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Bamboo": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 718, "2024-25": 0 },
+    "total_planted": 718,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Ficus religiosi": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 280, "2024-25": 0 },
+    "total_planted": 280,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Ficus benghalensis": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 561, "2024-25": 0 },
+    "total_planted": 561,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Amla": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 5320, "2024-25": 0 },
+    "total_planted": 5320,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Bel": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 1021, "2024-25": 0 },
+    "total_planted": 1021,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Jackfruit": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 165, "2024-25": 0 },
+    "total_planted": 165,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Custard Apple": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 693, "2024-25": 0 },
+    "total_planted": 693,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Pomegranate": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 5000, "2024-25": 0 },
+    "total_planted": 5000,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Silver Oak": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 3551, "2024-25": 0 },
+    "total_planted": 3551,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Eucalyptus": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 846, "2024-25": 0 },
+    "total_planted": 846,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Mahogany": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 1260, "2024-25": 0 },
+    "total_planted": 1260,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Sal": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 100 },
+    "total_planted": 100,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Shea": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 100 },
+    "total_planted": 100,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  },
+  "Cashew": {
+    "year_wise_plantation": { "2014-15": 0, "2015-16": 0, "2016-17": 0, "2017-18": 0, "2018-19": 0, "2019-20": 0, "2020-21": 0, "2021-22": 0, "2022-23": 0, "2023-24": 0, "2024-25": 100 },
+    "total_planted": 100,
+    "matured": 0,
+    "mortality_rate": 0.1,
+    "mature_alive": 0,
+    "carbon_sink_kg_per_year": 25,
+    "carbon_sink_tco2_per_year": 0
+  }
 }
