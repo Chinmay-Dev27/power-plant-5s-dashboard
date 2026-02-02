@@ -33,21 +33,57 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
-    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
-    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
-    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
+    /* GLOBAL THEME - Professional Slate/Navy */
+    .stApp {
+        background-color: #f0f2f6;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #ffffff;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    /* CUSTOM TABS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(255,255,255,0.05);
+        padding: 10px;
+        border-radius: 50px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 20px;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #F59E0B; /* Amber/Orange */
+        color: white;
+    }
+    
+    /* GLASS CARDS */
+    .glass-card {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
+    
+    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .border-shut { border-top: 3px solid #64748b; }
     .border-green { border-top: 3px solid #00ff88; }
     .border-solar { border-top: 3px solid #FFD700; }
+    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -71,6 +107,7 @@ def init_github():
             return g.get_repo(st.secrets["REPO_NAME"])
     except: return None
 
+# --- HISTORY CSV HANDLING ---
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
@@ -83,7 +120,8 @@ def load_history(repo):
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
-    except: return pd.DataFrame(), None
+    except: 
+        return pd.DataFrame(), None
 
 def save_history(repo, df, sha):
     try:
@@ -106,17 +144,15 @@ def load_analytics_state(repo):
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
-        return data
-    except: return default_data
+        return data, file.sha
+    except:
+        return default_data, None
 
-def save_analytics_state(repo, data):
+def save_analytics_state(repo, data, sha):
     if not repo: return False
     try:
-        try:
-            file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
-            repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
-        except:
-            repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
         return True
     except: return False
 
@@ -177,7 +213,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
-    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -292,7 +327,7 @@ with st.sidebar:
     units_data = []
     repo = init_github()
     hist_df, sha = load_history(repo)
-    analytics_state = load_analytics_state(repo)
+    analytics_state, analytics_sha = load_analytics_state(repo)
     
     hist_data = {}
     if not hist_df.empty:
@@ -345,16 +380,16 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_analytics'] = ash_parsed
-                    save_analytics_state(repo, analytics_state)
-                    st.success("Ash Data Saved!")
-                    st.rerun()
+                    if save_analytics_state(repo, analytics_state, analytics_sha):
+                        st.success("Ash Data Saved to GitHub!")
+                        st.rerun()
             elif "plantation" in supp_file.name.lower():
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt'] = plant_parsed
-                    save_analytics_state(repo, analytics_state)
-                    st.success("Plantation Data Saved!")
-                    st.rerun()
+                    if save_analytics_state(repo, analytics_state, analytics_sha):
+                        st.success("Plantation Data Saved to GitHub!")
+                        st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
@@ -743,16 +778,14 @@ with tabs[9]:
         st.plotly_chart(fig_ash, use_container_width=True)
     with a2:
         st.markdown("#### Utilization Breakdown (Scenario)")
-        latest = ash_df.iloc[-1]
-        
-        # Apply scenario logic
-        base_bricks = latest['Bricks']
-        sim_bricks = base_bricks * (1 + ash_scenario/100)
-        
-        pie_data = pd.DataFrame({'Area': ['Bricks', 'Cement', 'Dyke'], 'Value': [sim_bricks, latest['Cement'], latest['Dyke']]})
-        fig_pie = px.pie(pie_data, values='Value', names='Area', hole=0.4, template='plotly_dark', color_discrete_sequence=px.colors.sequential.RdBu)
-        fig_pie.update_layout(height=350, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_pie, use_container_width=True)
+        if not ash_df.empty:
+            latest = ash_df.iloc[-1]
+            base_bricks = latest['Bricks']
+            sim_bricks = base_bricks * (1 + ash_scenario/100)
+            pie_data = pd.DataFrame({'Area': ['Bricks', 'Cement', 'Dyke'], 'Value': [sim_bricks, latest['Cement'], latest['Dyke']]})
+            fig_pie = px.pie(pie_data, values='Value', names='Area', hole=0.4, template='plotly_dark', color_discrete_sequence=px.colors.sequential.RdBu)
+            fig_pie.update_layout(height=350, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True)
 
 # TAB 11: INFO
 with tabs[10]:
