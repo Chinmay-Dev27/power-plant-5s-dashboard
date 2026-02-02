@@ -123,28 +123,16 @@ def save_analytics_state(repo, data):
         return True
     except: return False
 
-# --- UNIVERSAL PARSERS ---
+# --- ROBUST PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
-        # Load raw to find header
-        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
+        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         
-        # SMART SEARCH: Find row with "Species" or "Pongamia" or "Financial Year"
-        header_idx = 0
-        for i, row in df_raw.iterrows():
-            s = row.astype(str).str.lower().tolist()
-            if any("pongamia" in x for x in s) or any("financial year" in x for x in s):
-                header_idx = i
-                break
-        
-        df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        # Identify Year Column
-        year_col = next((c for c in df.columns if "year" in str(c).lower()), None)
+        # Scan for year column
+        year_col = next((c for c in df.columns if "Year" in str(c)), None)
         if not year_col: return []
         
-        # Identify Species Columns (Exclude metadata)
+        # Exclude known non-species columns
         exclude = ['Total', 'Survival', 'Remarks', year_col, 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed']
         species_cols = [c for c in df.columns if not any(x in str(c) for x in exclude)]
         
@@ -163,8 +151,9 @@ def parse_plantation_file(uploaded_file):
 
 def parse_ash_file(uploaded_file):
     try:
-        # SMART SEARCH: Find header with "Month" and "Utilization"
         df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
+        
+        # Locate header row
         header_idx = 0
         for i, row in df_raw.iterrows():
             s = row.astype(str).str.lower().tolist()
@@ -175,38 +164,32 @@ def parse_ash_file(uploaded_file):
         df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
         
         col_map = {}
-        # Dynamic Mapping
         for c in df.columns:
             cl = str(c).lower()
             if "month" in cl: col_map['Month'] = c
             elif "generation" in cl and "ash" in cl: col_map['Generation'] = c
             elif "utilized" in cl and "ash" in cl: col_map['Utilization'] = c
-            # Map Utilization Areas (Everything else is a potential area)
-            elif "brick" in cl: col_map['Bricks'] = c
-            elif "cement" in cl: col_map['Cement'] = c
-            elif "dyke" in cl: col_map['Dyke'] = c
-            elif "road" in cl: col_map['Road Embankment'] = c
-            elif "mine" in cl: col_map['Mine Filling'] = c
-            elif "reclaimation" in cl: col_map['Reclamation'] = c
-            elif "agriculture" in cl: col_map['Agriculture'] = c
-            elif "hydro" in cl: col_map['Hydro'] = c
+            else:
+                # Capture ALL other columns as utilization avenues
+                # e.g., Bricks, Cement, Road, Dyke, Mines, etc.
+                if "total" not in cl and "unnamed" not in cl:
+                    col_map[str(c).strip()] = c
         
         final_data = []
         for _, row in df.iterrows():
             if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
             record = {}
-            # Base Keys
+            # Standard Keys
             record['Month'] = row[col_map.get('Month')]
             record['Generation'] = row.get(col_map.get('Generation'), 0)
             record['Utilization'] = row.get(col_map.get('Utilization'), 0)
             
-            # Dynamic Areas
-            for std_key, col_name in col_map.items():
-                if std_key not in ['Month', 'Generation', 'Utilization']:
+            # Dynamic Keys (Everything else)
+            for key, col_name in col_map.items():
+                if key not in ['Month', 'Generation', 'Utilization']:
                     try: val = float(row[col_name])
                     except: val = 0.0
-                    record[std_key] = val
-            
+                    record[key] = val
             final_data.append(record)
             
         return final_data
@@ -357,7 +340,7 @@ with st.sidebar:
     units_data = []
     repo = init_github()
     hist_df, sha = load_history(repo)
-    analytics_state, analytics_sha = load_analytics_state(repo)
+    analytics_state = load_analytics_state(repo)
     
     hist_data = {}
     if not hist_df.empty:
@@ -624,9 +607,6 @@ with tabs[1]:
     **Logic:**
     * **SOx/NOx:** Real-time stack monitoring data.
     * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
-    
-    **Formulas:**
-    * $$Virtual\_Trees = \frac{Total\_Plant\_Emissions}{0.025 \text{ (CO2 absorbed per tree)}}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -638,7 +618,6 @@ with tabs[1]:
         st.markdown("#### 🌳 Greenbelt Reality Check")
         real_trees = 354762
         virtual_trees = green_trees + sum(u['trees'] for u in units_data) if units_data else 0
-        st.info("**Physical:** Actual trees planted. **Virtual:** CO2 reduction converted to 'Tree Equivalent'.")
         c_g1, c_g2 = st.columns(2)
         c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
         c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
@@ -649,11 +628,6 @@ with tabs[2]:
     **Ash Management:**
     * **Generation:** Calculated based on Coal Consumption & Ash %.
     * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
-    * **Burj Khalifa Index:** A fun metric comparing total ash volume to the volume of the Burj Khalifa.
-    
-    **Formulas:**
-    * $$Ash\_Gen = Coal\_Cons \times Ash\%$$
-    * $$Burj\_Index = \frac{Ash\_Volume}{Burj\_Volume}$$
     """)
     c1, c2 = st.columns(2)
     with c1:
@@ -675,66 +649,32 @@ with tabs[3]:
     **Green Power Impact:**
     * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
     * **Solar:** Captive solar power reducing auxiliary consumption.
-    
-    **Equivalency:**
-    * $$Homes\_Powered = \frac{Renewable\_Units}{4 \text{ (Avg Daily Consumption)}}$$
     """)
     st.markdown("#### ⚡ Green Power Impact")
-    
-    # GLASS CARDS FOR RENEWABLES
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"""
-        <div class="glass-card border-green">
-            <div class="unit-header">BIOMASS</div>
-            <div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div>
-            <div class="sub-lbl">CO2 Saved Today</div>
-            <hr style="border-color:#ffffff33;">
-            <div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div>
-            <div class="sub-lbl">Homes Powered</div>
-        </div>""", unsafe_allow_html=True)
-        
+        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""
-        <div class="glass-card border-solar">
-            <div class="unit-header">SOLAR</div>
-            <div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div>
-            <div class="sub-lbl">CO2 Saved Today</div>
-            <hr style="border-color:#ffffff33;">
-            <div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div>
-            <div class="sub-lbl">Homes Powered</div>
-        </div>""", unsafe_allow_html=True)
-        
+        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
 if units_data:
     for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
         with tab:
-            display_info(r"""
-            **Unit Performance:**
-            * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
-            * **5S Score:** Technical hygiene score based on parameter adherence.
-            
-            **Loss Formulas (Approx):**
-            * Vacuum: 15 kcal/kWh per 0.01 deviation.
-            * MS Temp: 0.7 kcal/kWh per degree deviation.
-            """)
             u = units_data[i]
             render_unit_detail(u, configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
+    display_info("Historical Performance Analysis.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
         cutoff_ts = pd.Timestamp(cutoff)
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
-        
-        filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
-        
+        filtered_df = filtered_df[filtered_df['HR'] > 100]
         filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -755,53 +695,32 @@ with tabs[8]:
     st.markdown("### 🎮 Simulator")
     display_info(r"""
     **Simulation Logic:**
-    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
     * **Vacuum:** Lower (more negative) is better.
-    * **APC:** Auxiliary Power Consumption directly reduces salable power.
-    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
+    * **APC:** Auxiliary Power Consumption.
     """)
-    
-    # 3x2 Grid for Sliders
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
         s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
-        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1, help="Aux Power Cons. Standard: 6.5%")
+        s_apc = st.slider("APC (%)", 5.0, 10.0, 6.5, step=0.1)
     with s_c3:
         s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
-    
-    # Simulation Logic
-    # Base HR = 2250.
     sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
     sim_fg_loss = (s_fg - 130) / 2
-    
-    # Total HR Impact
     sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
-    
-    # Financial Impact (Daily for 1 Unit @ 8.4 MU)
-    # Profit Impact = HR Impact + APC Impact + GCV Cost
-    # APC Impact: 1% increase = 1% loss of revenue
-    # Revenue/day = 8.4 MU * 10^6 * 3 Rs = 2.52 Cr
     base_revenue = 25200000 
     sim_apc_loss = base_revenue * ((s_apc - 6.5)/100) * -1
-    
-    # HR Profit Impact
     sim_hr_profit = (-1 * sim_hr_impact) * 8.4 * 1000
-    
     total_sim_impact = sim_hr_profit + sim_apc_loss
-    
     st.divider()
     r1, r2, r3 = st.columns(3)
-    with r1:
-        st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
-    with r2:
-        st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
-    with r3:
-        st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
+    with r1: st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
+    with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
+    with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
 # TAB 10: ANALYTICS (IMPROVED)
 with tabs[9]:
@@ -819,32 +738,39 @@ with tabs[9]:
         # Controls
         gc1, gc2 = st.columns(2)
         with gc1:
-            years_proj = st.slider("⏳ Time Machine (Years)", 0, 30, 0, help="Project CO2 removal into the future")
+            sel_year = st.selectbox("📅 Select Year for Breakdown", sorted(df_gb['Year'].unique(), reverse=True))
         with gc2:
-            all_sp = sorted(df_gb['Species'].unique())
-            sel_sp = st.multiselect("Filter Species", all_sp, default=all_sp[:5])
+            years_proj = st.slider("⏳ Time Machine (Years)", 0, 30, 0, help="Project CO2 removal into the future")
         
         # Filter & Calc
-        df_filt = df_gb[df_gb['Species'].isin(sel_sp)] if sel_sp else df_gb
-        current_trees = df_filt['Count'].sum()
-        base_co2 = current_trees * 0.025 # 25kg/tree
+        df_year = df_gb[df_gb['Year'] == sel_year]
+        total_trees = df_gb['Count'].sum()
+        base_co2 = total_trees * 0.025 # 25kg/tree
         proj_co2 = base_co2 * ((1.05)**years_proj) # 5% growth
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Selected Trees", f"{current_trees:,}")
+        m1.metric("Total Plantation (All Years)", f"{total_trees:,}")
         m2.metric("Current CO2 Sink", f"{base_co2:,.1f} T")
         m3.metric(f"Projected (+{years_proj} yr)", f"{proj_co2:,.1f} T", delta=f"{proj_co2-base_co2:,.0f} T")
         
-        # PIE GRID (Top 4 Species)
-        top_4 = df_filt.groupby('Species')['Count'].sum().nlargest(4).index.tolist()
-        if top_4:
-            st.markdown("#### Species Composition (Top 4)")
-            fig_grid = make_subplots(rows=1, cols=4, specs=[[{'type':'domain'}]*4], subplot_titles=top_4)
-            for i, sp in enumerate(top_4):
-                val = df_filt[df_filt['Species']==sp]['Count'].sum()
-                fig_grid.add_trace(go.Pie(labels=['Alive', 'Gap'], values=[val, val*0.1], hole=0.6, marker_colors=['#00ff88', '#333']), row=1, col=i+1)
-            fig_grid.update_layout(height=250, margin=dict(t=30, b=0, l=0, r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_grid, use_container_width=True)
+        # Charts
+        c1, c2 = st.columns(2)
+        with c1:
+            fig_pie = px.pie(df_year, values='Count', names='Species', title=f"Species Mix in {sel_year}", hole=0.4, template='plotly_dark')
+            fig_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True)
+        with c2:
+            df_trend = df_gb.groupby('Year')['Count'].sum().reset_index()
+            fig_trend = px.bar(df_trend, x='Year', y='Count', title="Plantation Trend (Year-wise)", template='plotly_dark', color_discrete_sequence=['#00ff88'])
+            fig_trend.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_trend, use_container_width=True)
+            
+        # Heatmap
+        st.markdown("#### Species Density Heatmap")
+        fig_heat = px.density_heatmap(df_gb, x='Year', y='Species', z='Count', color_continuous_scale='Greens')
+        fig_heat.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_heat, use_container_width=True)
+        
     else:
         st.info("Upload 'Plantation data.xlsx' to see Greenbelt Analytics.")
 
@@ -853,19 +779,6 @@ with tabs[9]:
     if ash_raw:
         df_ash = pd.DataFrame(ash_raw)
         st.markdown('<div class="section-header">🪨 Ash Pond Impact Simulator</div>', unsafe_allow_html=True)
-        
-        # Ash Heatmap
-        st.markdown("#### Utilization Heatmap")
-        # Pivot for heatmap: Rows=Type, Cols=Month
-        # We need to melt first
-        ignore = ['month', 'generation', 'utilization', 'simulated_total']
-        avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
-        
-        if avail_cols:
-            df_heat = df_ash.melt(id_vars='Month', value_vars=avail_cols, var_name='Type', value_name='Tons')
-            fig_heat = px.density_heatmap(df_heat, x='Month', y='Type', z='Tons', color_continuous_scale='Magma')
-            fig_heat.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_heat, use_container_width=True)
         
         # Ash Slider
         sim_util_boost = st.slider("📈 Boost Ash Utilization (%)", 0, 50, 0, help="Simulate increasing utilization efforts")
@@ -886,6 +799,27 @@ with tabs[9]:
                 st.metric("Simulated Utilization", f"{boosted_util:.2f} LT", delta=f"{sim_util_boost}%")
             with a2:
                 st.metric("Pond Life Extended", f"+{pond_life_gain_days:.1f} Days", help="Based on saved volume")
+                
+            # Stacked Area Chart (Dynamic)
+            ignore = ['month', 'generation', 'utilization', 'simulated_total']
+            avail_cols = [c for c in df_ash.columns if str(c).lower() not in ignore]
+            
+            c_ash1, c_ash2 = st.columns(2)
+            with c_ash1:
+                sel_month = st.selectbox("Select Month for Breakdown", df_ash['Month'].unique())
+                df_month = df_ash[df_ash['Month'] == sel_month]
+                # Filter cols for pie
+                pie_vals = {k: df_month.iloc[0][k] for k in avail_cols if df_month.iloc[0][k] > 0}
+                fig_ash_pie = px.pie(values=list(pie_vals.values()), names=list(pie_vals.keys()), title=f"Utilization in {sel_month}", hole=0.4, template='plotly_dark')
+                fig_ash_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_ash_pie, use_container_width=True)
+                
+            with c_ash2:
+                fig_area = px.area(df_ash, x='Month', y=avail_cols, title="Utilization Avenues Trend")
+                df_ash['Simulated_Total'] = df_ash[util_col] * (1 + sim_util_boost/100)
+                fig_area.add_scatter(x=df_ash['Month'], y=df_ash['Simulated_Total'], mode='lines', name='Simulated Total', line=dict(color='white', dash='dash'))
+                fig_area.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_area, use_container_width=True)
         else:
             st.warning("Could not identify 'Utilization' column in the uploaded data.")
     else:
