@@ -14,8 +14,7 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import matplotlib
 import base64
-import tempfile
-import os
+import json
 
 # Force matplotlib to use a non-interactive backend
 matplotlib.use('Agg')
@@ -34,67 +33,20 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    /* GLOBAL THEME - Professional Slate/Navy */
-    .stApp {
-        background-color: #f0f2f6;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        font-family: 'Roboto', sans-serif;
-    }
-    
-    /* CUSTOM TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 50px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 20px;
-        color: #94a3b8;
-        font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F59E0B; /* Amber/Orange */
-        color: white;
-    }
-    
-    /* GLASS CARDS */
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        text-align: center;
-        transition: transform 0.2s ease;
-    }
+    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
+    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
-    
-    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .border-shut { border-top: 3px solid #64748b; }
     .border-green { border-top: 3px solid #00ff88; }
     .border-solar { border-top: 3px solid #FFD700; }
-    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    
-    /* BURJ KHALIFA TEXT */
-    .burj-text {
-        font-family: 'Oswald', sans-serif;
-        font-size: 42px;
-        font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -118,6 +70,7 @@ def init_github():
             return g.get_repo(st.secrets["REPO_NAME"])
     except: return None
 
+# --- HISTORY CSV HANDLING ---
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
@@ -127,12 +80,12 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
+        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
     except: 
-        cols = ["Date", "Unit", "Profit", "HR", "SOx", "NOx", "Gen", "Ash Util", "Coal Ash %", "Biomass", "Solar", "Vacuum", "MS Temp", "FG Temp", "Spray", "Ash Cement", "Ash Bricks"]
-        return pd.DataFrame(columns=cols), None
+        return pd.DataFrame(), None
 
 def save_history(repo, df, sha):
     try:
@@ -144,51 +97,58 @@ def save_history(repo, df, sha):
         return True
     except: return False
 
-def generate_excel_template():
-    df = pd.DataFrame({
-        'Parameter': ['Generation (MU)', 'Heat Rate (kcal/kWh)', 'Vacuum (kg/cm2)', 
-                      'MS Temp (C)', 'FG Temp (C)', 'Spray (TPH)', 'SOx (mg/Nm3)', 
-                      'NOx (mg/Nm3)', 'Ash to Cement (Tons)', 'Ash to Bricks (Tons)', 'Biomass (Tons)', 'Solar (MU)'],
-        'Unit 1': [8.4, 2380, -0.90, 535, 135, 20, 550, 400, 1000, 500, 0, 0],
-        'Unit 2': [8.2, 2310, -0.92, 538, 132, 18, 540, 390, 900, 500, 0, 0],
-        'Unit 3': [8.5, 2290, -0.93, 540, 130, 15, 530, 380, 1100, 500, 0, 0]
-    })
-    return df
+# --- NEW: ANALYTICS STATE HANDLING (JSON) ---
+def load_analytics_state(repo):
+    default_data = {
+        "greenbelt": {
+            'total_planted': 407010, 'matured': 394180, 'survival_rate': 90, 'net_available': 354762, 'ghg_removal': 8869.05,
+            'species': {'Pongamia': 19074, 'Neem': 102604, 'Kadamba': 36127, 'Teak': 15000, 'Bamboo': 50000}
+        },
+        "ash_analytics": {
+            'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG'],
+            'Generation': [2.42, 2.45, 2.27, 1.87, 2.10], 'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10],
+            'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70], 'Cement': [0.78, 0.78, 0.66, 0.50, 0.65], 'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75]
+        }
+    }
+    
+    if not repo: return default_data
+    try:
+        # Try to fetch the master JSON file
+        file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
+        data = json.loads(file.decoded_content.decode())
+        return data
+    except:
+        return default_data
 
-def generate_bulk_template():
-    df = pd.DataFrame({
-        'Date': ['2024-01-01', '2024-01-01', '2024-01-01'],
-        'Unit': ['1', '2', '3'],
-        'Gen': [8.4, 8.2, 8.5], 'HR': [2380, 2310, 2290], 'Vacuum': [-0.90, -0.92, -0.93], 'MS Temp': [535, 538, 540],
-        'FG Temp': [135, 132, 130], 'Spray': [20, 18, 15], 'SOx': [550, 540, 530], 'NOx': [400, 390, 380],
-        'Ash Cement': [1000, 900, 1100], 'Ash Bricks': [500, 500, 500], 'Coal Ash %': [35.0, 35.0, 35.0], 
-        'Biomass': [0, 0, 0], 'Solar': [0, 0, 0]
-    })
-    return df
+def save_analytics_state(repo, data):
+    if not repo: return False
+    try:
+        # Check if file exists to update or create
+        try:
+            file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
+            repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
+        except:
+            repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
+        return True
+    except Exception as e:
+        st.error(f"Save Failed: {e}")
+        return False
 
-def format_lacs(value):
-    val_lac = value / 100000
-    return f"₹ {val_lac:,.2f} Lac"
-
-# --- NEW: ANALYTICS PARSERS (Dynamic) ---
+# --- PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
-        # User format: "Plantation data.xlsx" with species cols
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
-        # Look for Total row or summary
-        # Simplified parser for demo stability:
-        # Assuming cols: 'Financial Year', 'Pongamia', 'Neem'...
-        # And a 'Total' column or row
-        # If strict structure unknown, we extract numeric columns for species
         species_cols = [c for c in df.columns if c not in ['Financial Year', 'Total', 'Survival Rate', 'Remarks']]
         species_sum = df[species_cols].sum().to_dict()
-        
-        total_planted = df['Total'].sum() if 'Total' in df.columns else sum(species_sum.values())
+        total_planted = float(df['Total'].sum() if 'Total' in df.columns else sum(species_sum.values()))
+        # Convert all numpy int to python int for JSON serialization
+        species_sum = {k: int(v) for k, v in species_sum.items()}
         return {
-            'total_planted': total_planted,
-            'matured': total_planted * 0.95, # Approx
-            'survival_rate': 90, # Approx from file snippet
-            'ghg_removal': total_planted * 0.025 * 1000, # Dummy logic if col missing
+            'total_planted': int(total_planted),
+            'matured': int(total_planted * 0.95),
+            'survival_rate': 90,
+            'net_available': int(total_planted * 0.9),
+            'ghg_removal': float(total_planted * 0.025 * 1000),
             'species': species_sum
         }
     except: return None
@@ -196,32 +156,29 @@ def parse_plantation_file(uploaded_file):
 def parse_ash_file(uploaded_file):
     try:
         df = pd.read_excel(uploaded_file, header=9) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=9)
-        # Expecting 'Month', 'Ash Generation', 'Ash Utilized', 'Bricks', 'Cement'
-        # Standardize cols
-        # Map user cols to standard
         col_map = {'Ash Generation (in LTPM)': 'Generation', 'Ash Utilized\n(in LTPM)': 'Utilization', 
                    'Bricks': 'Bricks', 'Cement': 'Cement', 'Ash Dyke Raising': 'Dyke'}
-        # Fuzzy match
         clean_cols = {}
         for c in df.columns:
             for k, v in col_map.items():
                 if k in str(c): clean_cols[c] = v
         df = df.rename(columns=clean_cols)
-        return df[['Month', 'Generation', 'Utilization', 'Bricks', 'Cement', 'Dyke']].dropna()
+        df_clean = df[['Month', 'Generation', 'Utilization', 'Bricks', 'Cement', 'Dyke']].dropna()
+        # Convert to dict format for JSON
+        return df_clean.to_dict(orient='list')
     except: return None
 
-# Fallback Data
-def get_greenbelt_data_static():
-    return {
-        'total_planted': 407010, 'matured': 394180, 'survival_rate': 90, 'net_available': 354762, 'ghg_removal': 8869.05,
-        'species': {'Pongamia': 19074, 'Neem': 102604, 'Kadamba': 36127, 'Teak': 15000, 'Bamboo': 50000}
-    }
-def get_ash_analytics_data_static():
-    return pd.DataFrame({
-        'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG'],
-        'Generation': [2.42, 2.45, 2.27, 1.87, 2.10], 'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10],
-        'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70], 'Cement': [0.78, 0.78, 0.66, 0.50, 0.65], 'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75]
-    })
+def generate_excel_template():
+    df = pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
+    return df
+
+def generate_bulk_template():
+    df = pd.DataFrame({'Date': ['2024-01-01'], 'Unit': ['1'], 'Gen': [0], 'HR': [2300]})
+    return df
+
+def format_lacs(value):
+    val_lac = value / 100000
+    return f"₹ {val_lac:,.2f} Lac"
 
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
@@ -242,6 +199,8 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
+    
+    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -256,13 +215,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "Environment & Ash", 0, 1)
-    pdf.ln(5)
-    pdf.set_font("Arial", size=10)
-    pdf.cell(0, 10, f"Ash Gen: {ash_data['gen']:.0f} T | Util: {ash_data['util']:.0f} T", 0, 1)
-    pdf.cell(0, 10, f"Solar CO2 Saved: {green_data['sol_co2']:.2f} T", 0, 1)
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
@@ -282,6 +234,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         coal_saved_kg = kcal_diff / COAL_GCV
         carbon_tons = (coal_saved_kg / 1000) * 1.7
         profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
+        
         l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
         l_ms = max(0, (540 - inputs['ms']) * 1.2)
         l_fg = max(0, (inputs['fg'] - 130) * 1.5)
@@ -296,6 +249,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     bricks_current = ash_params['util_brick'] * 666
     bricks_potential_total = ash_gen * 666
     burj_pct = (bricks_current / 165_000_000) * 100
+    
     bio_units = ash_params.get('biomass', 0) * 1000 * 1.2 
     homes_bio = bio_units / 4 
     
@@ -317,6 +271,7 @@ def render_unit_detail(u, configs):
     if u['status'] == "SHUTDOWN":
         st.error("🚨 UNIT SHUTDOWN - No Efficiency Analysis Available")
         return
+
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown("#### 🏎️ Efficiency Gauge")
@@ -332,6 +287,7 @@ def render_unit_detail(u, configs):
         ))
         fig.update_layout(height=250, margin=dict(l=20,r=20,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
         st.plotly_chart(fig, width="stretch", key=f"gauge_{u['id']}")
+
     with c2:
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
@@ -343,20 +299,29 @@ def render_unit_detail(u, configs):
         )
         fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
+
     st.divider()
     c3, c4 = st.columns(2)
-    with c3: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
-    with c4: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #FF9933"><div class="p-title">5S Score</div><div class="big-val" style="color:#FF9933">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #00ccff"><div class="p-title">Carbon Credits</div><div class="big-val" style="color:#00ccff">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
     try: st.image("1000051706.png", width="stretch")
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
+    
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
     units_data = [] # Init
+    
     repo = init_github()
     hist_df, sha = load_history(repo)
+    
+    # LOAD ANALYTICS DATA FROM JSON (Or init default)
+    analytics_state = load_analytics_state(repo)
+    
     hist_data = {}
     if not hist_df.empty:
         date_in_ts = pd.Timestamp(date_in)
@@ -379,7 +344,6 @@ with st.sidebar:
                     daily_defaults = df_up.to_dict()
                     st.session_state['daily_data'] = daily_defaults
                     st.toast("Daily Data Applied", icon="✅")
-                else: st.error("Missing 'Parameter' column.")
             except: st.error("Read Error")
             
         bulk_file = st.file_uploader("Bulk History", type=['csv'])
@@ -401,17 +365,25 @@ with st.sidebar:
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
-    # NEW: SUPPLEMENTARY UPLOADER
+    # NEW: SUPPLEMENTARY UPLOADER (Updates JSON)
     with st.expander("📂 Supplementary Reports (Analytics)"):
-        st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics charts.")
-        supp_file = st.file_uploader("Upload Report", type=['xlsx'])
+        st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics.")
+        supp_file = st.file_uploader("Upload Report", type=['xlsx', 'csv'])
         if supp_file:
             if "ash" in supp_file.name.lower():
-                st.session_state['ash_data'] = parse_ash_file(supp_file)
-                st.success("Ash Data Updated!")
+                ash_parsed = parse_ash_file(supp_file)
+                if ash_parsed:
+                    analytics_state['ash_analytics'] = ash_parsed
+                    if save_analytics_state(repo, analytics_state):
+                        st.success("Ash Data Saved to GitHub!")
+                        st.rerun()
             elif "plantation" in supp_file.name.lower():
-                st.session_state['plantation_data'] = parse_plantation_file(supp_file)
-                st.success("Plantation Data Updated!")
+                plant_parsed = parse_plantation_file(supp_file)
+                if plant_parsed:
+                    analytics_state['greenbelt'] = plant_parsed
+                    if save_analytics_state(repo, analytics_state):
+                        st.success("Plantation Data Saved to GitHub!")
+                        st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
@@ -710,7 +682,7 @@ with tabs[8]:
     """)
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
-        s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001)
+        s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
         s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
     with s_c2:
         s_fg = st.slider("FG Temp (°C)", 110, 160, 130)
@@ -735,9 +707,9 @@ with tabs[8]:
 # TAB 10: ANALYTICS
 with tabs[9]:
     st.markdown("### 📊 Power BI Analytics")
-    # Load dynamic if available, else static
-    gb_data = st.session_state.get('plantation_data', get_greenbelt_data_static())
-    ash_df = st.session_state.get('ash_data', get_ash_analytics_data_static())
+    gb_data = analytics_state['greenbelt']
+    ash_data_raw = analytics_state['ash_analytics']
+    ash_df = pd.DataFrame(ash_data_raw)
     
     st.markdown('<div class="section-header">🌳 Greenbelt Analytics</div>', unsafe_allow_html=True)
     k1, k2, k3, k4 = st.columns(4)
@@ -773,7 +745,6 @@ with tabs[9]:
     with a2:
         st.markdown("#### Utilization Breakdown")
         latest = ash_df.iloc[-1]
-        # Dynamic check for columns
         pie_data_dict = {}
         if 'Bricks' in ash_df.columns: pie_data_dict['Bricks'] = latest['Bricks']
         if 'Cement' in ash_df.columns: pie_data_dict['Cement'] = latest['Cement']
@@ -789,6 +760,7 @@ with tabs[10]:
     st.markdown("### 📚 Knowledge Base & Formulas")
     with st.expander("💰 Profit Calculation"):
         st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
+        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
     with st.expander("🪨 Ash Pond Logic"):
         st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
     with st.expander("🏆 5S Score Logic"):
