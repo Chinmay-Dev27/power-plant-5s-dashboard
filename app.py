@@ -34,21 +34,67 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
-    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
-    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
-    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
+    /* GLOBAL THEME - Professional Slate/Navy */
+    .stApp {
+        background-color: #f0f2f6;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #ffffff;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    /* CUSTOM TABS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: rgba(255,255,255,0.05);
+        padding: 10px;
+        border-radius: 50px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 20px;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #F59E0B; /* Amber/Orange */
+        color: white;
+    }
+    
+    /* GLASS CARDS */
+    .glass-card {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
+    
+    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .border-shut { border-top: 3px solid #64748b; }
     .border-green { border-top: 3px solid #00ff88; }
     .border-solar { border-top: 3px solid #FFD700; }
+    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    /* BURJ KHALIFA TEXT */
+    .burj-text {
+        font-family: 'Oswald', sans-serif;
+        font-size: 42px;
+        font-weight: 700;
+        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -124,6 +170,34 @@ def generate_bulk_template():
 def format_lacs(value):
     val_lac = value / 100000
     return f"₹ {val_lac:,.2f} Lac"
+
+# --- NEW: ANALYTICS DATA LOADERS ---
+def get_greenbelt_data():
+    # Demo data based on user files
+    return {
+        'total_planted': 407010,
+        'matured': 394180,
+        'survival_rate': 90,
+        'net_available': 354762,
+        'ghg_removal': 8869.05,
+        'species': {
+            'Pongamia': 19074, 'Alstonia': 14215, 'Peltophorrum': 13224, 
+            'Neem': 102604, 'Kadamba': 36127, 'Mango': 3500, 'Guava': 3549,
+            'Ashoka': 3000, 'Teak': 15000, 'Bamboo': 50000, 'Others': 100000
+        }
+    }
+
+def get_ash_analytics_data():
+    # Demo data extracted from user snippets
+    # LTPM = Lakh Tons Per Month? Assuming standard tons for visualization scaling
+    return pd.DataFrame({
+        'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT'],
+        'Generation': [2.42, 2.45, 2.27, 1.87, 2.10, 2.30, 2.40], # In Lakh Tons
+        'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10, 2.30, 2.40], # 100% util mostly
+        'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70, 0.75, 0.80],
+        'Cement': [0.78, 0.78, 0.66, 0.50, 0.65, 0.70, 0.75],
+        'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75, 0.85, 0.85]
+    })
 
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
@@ -274,6 +348,7 @@ with st.sidebar:
     
     hist_data = {}
     if not hist_df.empty:
+        # ROBUST DATE COMPARISON: Compare Timestamps directly
         date_in_ts = pd.Timestamp(date_in)
         day_df = hist_df[hist_df['Date'] == date_in_ts]
         if not day_df.empty:
@@ -420,19 +495,18 @@ date_in_ts = pd.Timestamp(date_in)
 if not hist_df.empty:
     hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
     hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    net_ash_added = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    remaining_cap_tons = pond_cap - net_ash_added
+    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
+    current_capacity_tons = pond_cap - cumulative_net_added_tons
     daily_net_dump = fleet_ash_gen - fleet_ash_util
-    
     if daily_net_dump > 0:
-        pond_days_left = remaining_cap_tons / daily_net_dump
+        pond_days_left = current_capacity_tons / daily_net_dump
     elif daily_net_dump < 0:
-        pond_days_left = 9999
+        pond_days_left = 9999 
     else:
         pond_days_left = 365
 else:
+    current_capacity_tons = pond_cap
     pond_days_left = 365
-    remaining_cap_tons = pond_cap
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -464,7 +538,7 @@ with c_top2:
         st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="GMR_Report.pdf">Download</a>', unsafe_allow_html=True)
 
 # TABS
-tabs = st.tabs(["🏠 War Room", "🌿 Sustainability", "🪨 Ash", "☀️ Green", "⚙️ Unit 1", "⚙️ Unit 2", "⚙️ Unit 3", "📈 Trends", "🎮 Sim", "ℹ️ Info"])
+tabs = st.tabs(["🏠 War Room", "🌿 Sustainability", "🪨 Ash", "☀️ Green", "⚙️ Unit 1", "⚙️ Unit 2", "⚙️ Unit 3", "📈 Trends", "🎮 Sim", "📊 Analytics", "ℹ️ Info"])
 
 def display_info(details):
     with st.expander("ℹ️ How to Read This Tab (Calculations & Logic)"):
@@ -477,10 +551,6 @@ with tabs[0]:
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
     * **Shutdown Loss:** Standardized at 350MW capacity $\times$ 24h $\times$ ₹3/unit = ₹2.52 Cr per day.
     * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
-    
-    **Key Formulas:**
-    * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
-    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
     """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
@@ -517,7 +587,7 @@ with tabs[0]:
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
             <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {remaining_cap_tons/1000:,.0f}k</div>
+            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -528,14 +598,7 @@ with tabs[0]:
 
 # TAB 2: COMPLIANCE
 with tabs[1]:
-    display_info(r"""
-    **Logic:**
-    * **SOx/NOx:** Real-time stack monitoring data.
-    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
-    
-    **Formulas:**
-    * $$Virtual\_Trees = \frac{Total\_Plant\_Emissions}{0.025 \text{ (CO2 absorbed per tree)}}$$
-    """)
+    display_info("Tracks Emission Compliance & Green Initiatives.")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🌍 Emissions Status")
@@ -546,23 +609,13 @@ with tabs[1]:
         st.markdown("#### 🌳 Greenbelt Reality Check")
         real_trees = 354762
         virtual_trees = green_trees + sum(u['trees'] for u in units_data) if units_data else 0
-        st.info("**Physical:** Actual trees planted. **Virtual:** CO2 reduction converted to 'Tree Equivalent'.")
         c_g1, c_g2 = st.columns(2)
         c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
         c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
 
 # TAB 3: ASH
 with tabs[2]:
-    display_info(r"""
-    **Ash Management:**
-    * **Generation:** Calculated based on Coal Consumption & Ash %.
-    * **Utilization:** Broken down into Cement (High Value) and Bricks/Landfill (Low Value).
-    * **Burj Khalifa Index:** A fun metric comparing total ash volume to the volume of the Burj Khalifa.
-    
-    **Formulas:**
-    * $$Ash\_Gen = Coal\_Cons \times Ash\%$$
-    * $$Burj\_Index = \frac{Ash\_Volume}{Burj\_Volume}$$
-    """)
+    display_info("Ash Utilization, Stock, and Brick Potential.")
     c1, c2 = st.columns(2)
     with c1:
         st.metric("Ash Generated", f"{fleet_ash_gen:,.0f} T")
@@ -579,70 +632,32 @@ with tabs[2]:
 
 # TAB 4: RENEWABLES
 with tabs[3]:
-    display_info(r"""
-    **Green Power Impact:**
-    * **Biomass:** Co-firing agricultural waste with coal. Reduces net CO2.
-    * **Solar:** Captive solar power reducing auxiliary consumption.
-    
-    **Equivalency:**
-    * $$Homes\_Powered = \frac{Renewable\_Units}{4 \text{ (Avg Daily Consumption)}}$$
-    """)
+    display_info("Impact of Biomass Co-firing and Solar Power.")
     st.markdown("#### ⚡ Green Power Impact")
-    
-    # GLASS CARDS FOR RENEWABLES
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"""
-        <div class="glass-card border-green">
-            <div class="unit-header">BIOMASS</div>
-            <div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div>
-            <div class="sub-lbl">CO2 Saved Today</div>
-            <hr style="border-color:#ffffff33;">
-            <div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div>
-            <div class="sub-lbl">Homes Powered</div>
-        </div>""", unsafe_allow_html=True)
-        
+        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#00ff88">{bio_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""
-        <div class="glass-card border-solar">
-            <div class="unit-header">SOLAR</div>
-            <div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div>
-            <div class="sub-lbl">CO2 Saved Today</div>
-            <hr style="border-color:#ffffff33;">
-            <div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div>
-            <div class="sub-lbl">Homes Powered</div>
-        </div>""", unsafe_allow_html=True)
-        
+        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#FFD700">{sol_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
 if units_data:
     for i, tab in enumerate([tabs[4], tabs[5], tabs[6]]):
         with tab:
-            display_info(r"""
-            **Unit Performance:**
-            * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
-            * **5S Score:** Technical hygiene score based on parameter adherence.
-            
-            **Loss Formulas (Approx):**
-            * Vacuum: 15 kcal/kWh per 0.01 deviation.
-            * MS Temp: 0.7 kcal/kWh per degree deviation.
-            """)
             u = units_data[i]
             render_unit_detail(u, configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
+    display_info("Historical Performance Analysis.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
         cutoff = date_in - timedelta(days=days_back)
         cutoff_ts = pd.Timestamp(cutoff)
         filtered_df = hist_df[(hist_df['Date'] >= cutoff_ts) & (hist_df['Date'] <= date_in_ts)]
-        
-        filtered_df = filtered_df[filtered_df['HR'] > 100] # Hide Shutdowns
-        
+        filtered_df = filtered_df[filtered_df['HR'] > 100]
         filtered_df['Date_dt'] = filtered_df['Date'].dt.date
         filtered_df['Unit'] = filtered_df['Unit'].astype(str)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -661,15 +676,6 @@ with tabs[7]:
 # TAB 9: SIMULATOR
 with tabs[8]:
     st.markdown("### 🎮 Simulator")
-    display_info(r"""
-    **Simulation Logic:**
-    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
-    * **Vacuum:** Lower (more negative) is better.
-    * **APC:** Auxiliary Power Consumption directly reduces salable power.
-    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
-    """)
-    
-    # 3x2 Grid for Sliders
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
         s_vac = st.slider("Vacuum (kg/cm2)", -0.60, -0.99, -0.92, step=0.001, help="Standard: -0.92")
@@ -681,38 +687,77 @@ with tabs[8]:
         s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
         s_bio = st.slider("Biomass (%)", 0, 20, 0)
     
-    # Simulation Logic
-    # Base HR = 2250.
     sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15 
     sim_ms_loss = (540 - s_ms) * 0.7
     sim_fg_loss = (s_fg - 130) / 2
-    
-    # Total HR Impact
     sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
-    
-    # Financial Impact (Daily for 1 Unit @ 8.4 MU)
-    # Profit Impact = HR Impact + APC Impact + GCV Cost
-    # APC Impact: 1% increase = 1% loss of revenue
-    # Revenue/day = 8.4 MU * 10^6 * 3 Rs = 2.52 Cr
     base_revenue = 25200000 
     sim_apc_loss = base_revenue * ((s_apc - 6.5)/100) * -1
-    
-    # HR Profit Impact
     sim_hr_profit = (-1 * sim_hr_impact) * 8.4 * 1000
-    
     total_sim_impact = sim_hr_profit + sim_apc_loss
-    
     st.divider()
     r1, r2, r3 = st.columns(3)
-    with r1:
-        st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
-    with r2:
-        st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
-    with r3:
-        st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
+    with r1: st.metric("Net Heat Rate Impact", f"{sim_hr_impact:.1f} kcal/kWh", delta_color="inverse")
+    with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
+    with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
-# TAB 10: INFO
+# TAB 10: ANALYTICS
 with tabs[9]:
-    try: st.image("1000051705.jpg", use_container_width=True)
-    except: pass
-    st.markdown("### 5S Pillars: Sort, Set in Order, Shine, Standardize, Sustain")
+    st.markdown("### 📊 Power BI Analytics")
+    gb_data = get_greenbelt_data()
+    ash_df = get_ash_analytics_data()
+    
+    st.markdown('<div class="section-header">🌳 Greenbelt Analytics</div>', unsafe_allow_html=True)
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total Planted", f"{gb_data['total_planted']:,}")
+    k2.metric("Matured", f"{gb_data['matured']:,}")
+    k3.metric("Survival Rate", f"{gb_data['survival_rate']}%")
+    k4.metric("CO2 Removal", f"{gb_data['ghg_removal']:,} T")
+    
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.markdown("#### Species Distribution")
+        species_df = pd.DataFrame(list(gb_data['species'].items()), columns=['Species', 'Count'])
+        fig_tree = px.treemap(species_df, path=['Species'], values='Count', color='Count', color_continuous_scale='Greens')
+        fig_tree.update_layout(height=400, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_tree, use_container_width=True)
+    with c2:
+        st.markdown("#### Carbon Sink Status")
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = gb_data['ghg_removal'],
+            title = {'text': "GHG Removal (Tons)"},
+            gauge = {'axis': {'range': [0, 15000]}, 'bar': {'color': "#00ff88"}}
+        ))
+        fig_gauge.update_layout(height=300, margin=dict(t=0, l=20, r=20, b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+    st.markdown('<div class="section-header">🪨 Ash Utilization Analytics</div>', unsafe_allow_html=True)
+    a1, a2 = st.columns([2, 1])
+    with a1:
+        st.markdown("#### Generation vs Utilization Trend")
+        fig_ash = px.line(ash_df, x='Month', y=['Generation', 'Utilization'], markers=True, template='plotly_dark', color_discrete_sequence=['#FF9933', '#00CCFF'])
+        fig_ash.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_ash, use_container_width=True)
+    with a2:
+        st.markdown("#### Utilization Breakdown")
+        latest = ash_df.iloc[-1]
+        pie_data = pd.DataFrame({'Area': ['Bricks', 'Cement', 'Dyke'], 'Value': [latest['Bricks'], latest['Cement'], latest['Dyke']]})
+        fig_pie = px.pie(pie_data, values='Value', names='Area', hole=0.4, template='plotly_dark', color_discrete_sequence=px.colors.sequential.RdBu)
+        fig_pie.update_layout(height=350, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+# TAB 11: INFO
+with tabs[10]:
+    st.markdown("### 📚 Knowledge Base & Formulas")
+    with st.expander("💰 Profit Calculation"):
+        st.latex(r"Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000")
+        st.write("Where 1000 is a factor derived from Coal Cost and GCV to convert Heat Rate savings into Rupees.")
+    with st.expander("🪨 Ash Pond Logic"):
+        st.latex(r"Remaining = \frac{Capacity_{Max} - (Total_{Gen} - Total_{Util})}{Daily_{Gen} - Daily_{Util}}")
+    with st.expander("🏆 5S Score Logic"):
+        st.latex(r"Penalty = \frac{|Vac_{dev}| + MS_{dev} + FG_{dev} + Spray_{dev}}{3}")
+        st.latex(r"Score = 100 - Penalty")
+    with st.expander("☀️ Solar & Biomass"):
+        st.write("- **Solar Homes:** 1 MU = 1 Million Units. Avg Home = 1460 Units/Year (~4/day).")
+        st.write("- **Biomass:** 1 kg Biomass ≈ 1.2 kWh Electricity equivalent (avoided coal).")
