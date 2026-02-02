@@ -33,67 +33,21 @@ components.html(
 # --- 2. VISUAL OVERHAUL ---
 st.markdown("""
     <style>
-    /* GLOBAL THEME - Professional Slate/Navy */
-    .stApp {
-        background-color: #f0f2f6;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        font-family: 'Roboto', sans-serif;
-    }
-    
-    /* CUSTOM TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(255,255,255,0.05);
-        padding: 10px;
-        border-radius: 50px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        white-space: pre-wrap;
-        background-color: transparent;
-        border-radius: 20px;
-        color: #94a3b8;
-        font-weight: 500;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F59E0B; /* Amber/Orange */
-        color: white;
-    }
-    
-    /* GLASS CARDS */
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        text-align: center;
-        transition: transform 0.2s ease;
-    }
+    .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #94a3b8; font-weight: 500; }
+    .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
     .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
-    
-    /* UTILS */
     .border-good { border-top: 3px solid #10B981; }
     .border-bad { border-top: 3px solid #EF4444; }
     .border-shut { border-top: 3px solid #64748b; }
     .border-green { border-top: 3px solid #00ff88; }
     .border-solar { border-top: 3px solid #FFD700; }
-    
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: white; }
     .sub-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .section-header { font-family: 'Oswald', sans-serif; font-size: 22px; color: #F59E0B; margin: 20px 0 10px 0; border-bottom: 1px solid #444; }
-    
-    /* BURJ KHALIFA TEXT */
-    .burj-text {
-        font-family: 'Oswald', sans-serif;
-        font-size: 42px;
-        font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+    .burj-text { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 700; background: -webkit-linear-gradient(45deg, #F59E0B, #FCD34D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -117,7 +71,6 @@ def init_github():
             return g.get_repo(st.secrets["REPO_NAME"])
     except: return None
 
-# --- HISTORY CSV HANDLING ---
 def load_history(repo):
     if not repo: return pd.DataFrame()
     try:
@@ -127,80 +80,46 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
-        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
         return df, file.sha
-    except: 
-        return pd.DataFrame(), None
+    except: return pd.DataFrame(), None
 
 def save_history(repo, df, sha):
     try:
-        # Standardize Date Format
         df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-        
-        # CRITICAL DEDUPLICATION STEP:
-        # Remove any pre-existing duplicates based on Date + Unit
         df = df.drop_duplicates(subset=['Date', 'Unit'], keep='last')
-        
         csv_content = df.to_csv(index=False)
         msg = "Update" if sha else "Init"
-        
-        if sha: 
-            repo.update_file("plant_history_v28.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
-        else: 
-            repo.create_file("plant_history_v28.csv", msg, csv_content, branch=st.secrets["BRANCH"])
+        if sha: repo.update_file("plant_history_v28.csv", msg, csv_content, sha, branch=st.secrets["BRANCH"])
+        else: repo.create_file("plant_history_v28.csv", msg, csv_content, branch=st.secrets["BRANCH"])
         return True
     except: return False
 
 # --- ANALYTICS STATE HANDLING (JSON) ---
-def get_default_analytics():
-    return {
-        "greenbelt": {
-            'total_planted': 407010, 'matured': 394180, 'survival_rate': 90, 'net_available': 354762, 'ghg_removal': 8869.05,
-            'species': {'Pongamia': 19074, 'Neem': 102604, 'Kadamba': 36127, 'Teak': 15000, 'Bamboo': 50000}
-        },
-        "ash_analytics": {
-            'Month': ['APR', 'MAY', 'JUN', 'JUL', 'AUG'],
-            'Generation': [2.42, 2.45, 2.27, 1.87, 2.10], 'Utilization': [2.42, 2.45, 2.27, 1.87, 2.10],
-            'Bricks': [0.79, 0.84, 0.68, 0.62, 0.70], 'Cement': [0.78, 0.78, 0.66, 0.50, 0.65], 'Dyke': [0.84, 0.83, 0.92, 0.75, 0.75]
-        }
-    }
-
 def load_analytics_state(repo):
-    default_data = get_default_analytics()
+    default_data = {
+        "greenbelt": {'total_planted': 0, 'matured': 0, 'survival_rate': 0, 'net_available': 0, 'ghg_removal': 0, 'species': {}},
+        "ash_analytics": {'Month': [], 'Generation': [], 'Utilization': [], 'Bricks': [], 'Cement': [], 'Dyke': []}
+    }
     if not repo: return default_data
     try:
-        # Try to fetch the master JSON file
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
-        return data, file.sha
-    except:
-        # File doesn't exist? AUTO-CREATE IT NOW.
-        try:
-            repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(default_data), branch=st.secrets["BRANCH"])
-            return default_data, None
-        except:
-            return default_data, None
+        return data
+    except: return default_data
 
-def save_analytics_state(repo, data, sha):
+def save_analytics_state(repo, data):
     if not repo: return False
     try:
-        if sha:
-            repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), sha, branch=st.secrets["BRANCH"])
-        else:
-            # Fetch SHA again just in case
-            try:
-                file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
-                repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
-            except:
-                repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
+        try:
+            file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
+            repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), file.sha, branch=st.secrets["BRANCH"])
+        except:
+            repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
         return True
-    except Exception as e:
-        st.error(f"Save Failed: {e}")
-        return False
+    except: return False
 
-# --- PARSERS ---
 def parse_plantation_file(uploaded_file):
     try:
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
@@ -209,12 +128,9 @@ def parse_plantation_file(uploaded_file):
         total_planted = float(df['Total'].sum() if 'Total' in df.columns else sum(species_sum.values()))
         species_sum = {k: int(v) for k, v in species_sum.items()}
         return {
-            'total_planted': int(total_planted),
-            'matured': int(total_planted * 0.95),
-            'survival_rate': 90,
-            'net_available': int(total_planted * 0.9),
-            'ghg_removal': float(total_planted * 0.025 * 1000),
-            'species': species_sum
+            'total_planted': int(total_planted), 'matured': int(total_planted * 0.95),
+            'survival_rate': 90, 'net_available': int(total_planted * 0.9),
+            'ghg_removal': float(total_planted * 0.025 * 1000), 'species': species_sum
         }
     except: return None
 
@@ -233,12 +149,10 @@ def parse_ash_file(uploaded_file):
     except: return None
 
 def generate_excel_template():
-    df = pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
-    return df
+    return pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
 
 def generate_bulk_template():
-    df = pd.DataFrame({'Date': ['2024-01-01'], 'Unit': ['1'], 'Gen': [0], 'HR': [2300]})
-    return df
+    return pd.DataFrame({'Date': ['2024-01-01'], 'Unit': ['1'], 'Gen': [0], 'HR': [2300]})
 
 def format_lacs(value):
     val_lac = value / 100000
@@ -263,6 +177,7 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')} | P&L: Rs {fleet_pnl:,.0f}", 1, 1, 'C')
     pdf.ln(10)
+    # War Room Table
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     headers = ["Unit", "Gen", "HR", "Profit", "SOx", "NOx"]
@@ -289,7 +204,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 # --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
-    
     if gen <= 0 or hr <= 0:
         profit = -1 * (350 * 1000 * 24 * 3) 
         score = 0
@@ -374,15 +288,11 @@ with st.sidebar:
     try: st.image("1000051706.png", width="stretch")
     except: st.markdown("## **GMR POWER**") 
     st.title("Control Panel")
-    
     date_in = st.date_input("📅 Dashboard Date", datetime.now())
-    units_data = [] # Init
-    
+    units_data = []
     repo = init_github()
     hist_df, sha = load_history(repo)
-    
-    # LOAD ANALYTICS DATA FROM JSON (Or init default)
-    analytics_state, analytics_sha = load_analytics_state(repo)
+    analytics_state = load_analytics_state(repo)
     
     hist_data = {}
     if not hist_df.empty:
@@ -420,7 +330,6 @@ with st.sidebar:
                     df_comb['Date'] = pd.to_datetime(df_comb['Date'])
                     df_comb = df_comb.sort_values('Date')
                     df_comb['Date'] = df_comb['Date'].dt.strftime('%Y-%m-%d')
-                    # FORCE DEDUPLICATION
                     df_comb = df_comb.drop_duplicates(subset=['Date', 'Unit'], keep='last')
                     csv_c = df_comb.to_csv(index=False)
                     repo.update_file("plant_history_v28.csv", "Bulk Add", csv_c, file.sha, branch=st.secrets["BRANCH"])
@@ -428,7 +337,6 @@ with st.sidebar:
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
-    # NEW: SUPPLEMENTARY UPLOADER (Updates JSON)
     with st.expander("📂 Supplementary Reports (Analytics)"):
         st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics.")
         supp_file = st.file_uploader("Upload Report", type=['xlsx', 'csv'])
@@ -437,16 +345,16 @@ with st.sidebar:
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_analytics'] = ash_parsed
-                    if save_analytics_state(repo, analytics_state, analytics_sha):
-                        st.success("Ash Data Saved to GitHub!")
-                        st.rerun()
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Ash Data Saved!")
+                    st.rerun()
             elif "plantation" in supp_file.name.lower():
                 plant_parsed = parse_plantation_file(supp_file)
                 if plant_parsed:
                     analytics_state['greenbelt'] = plant_parsed
-                    if save_analytics_state(repo, analytics_state, analytics_sha):
-                        st.success("Plantation Data Saved to GitHub!")
-                        st.rerun()
+                    save_analytics_state(repo, analytics_state)
+                    st.success("Plantation Data Saved!")
+                    st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
@@ -464,7 +372,6 @@ with st.sidebar:
     st.markdown("---")
     
     tab_conf, tab_inp = st.tabs(["⚙️ Config", "📝 Inputs"])
-    
     with tab_conf:
         lim_sox = st.number_input("SOx Limit", value=600)
         lim_nox = st.number_input("NOx Limit", value=450)
@@ -770,35 +677,64 @@ with tabs[8]:
 # TAB 10: ANALYTICS
 with tabs[9]:
     st.markdown("### 📊 Power BI Analytics")
-    gb_data = analytics_state['greenbelt']
-    ash_data_raw = analytics_state['ash_analytics']
-    ash_df = pd.DataFrame(ash_data_raw)
+    
+    # INTERACTIVITY
+    c_int1, c_int2 = st.columns(2)
+    with c_int1:
+        # Load data
+        gb_data = analytics_state['greenbelt']
+        ash_df = pd.DataFrame(analytics_state['ash_analytics'])
+        
+        # 1. Species Filter
+        all_species = list(gb_data['species'].keys())
+        selected_species = st.multiselect("Filter Tree Species", all_species, default=all_species[:5])
+        
+        filtered_species = {k: v for k, v in gb_data['species'].items() if k in selected_species}
+        
+    with c_int2:
+        # 2. Projection Slider
+        years_proj = st.slider("Project CO2 Removal (Years)", 0, 20, 0)
+        
+    # Apply Projection
+    # 5% growth per year (simplified)
+    growth_factor = (1.05) ** years_proj
+    projected_co2 = gb_data['ghg_removal'] * growth_factor
+    
+    st.divider()
     
     st.markdown('<div class="section-header">🌳 Greenbelt Analytics</div>', unsafe_allow_html=True)
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total Planted", f"{gb_data['total_planted']:,}")
     k2.metric("Matured", f"{gb_data['matured']:,}")
     k3.metric("Survival Rate", f"{gb_data['survival_rate']}%")
-    k4.metric("CO2 Removal", f"{gb_data['ghg_removal']:,} T")
+    k4.metric(f"CO2 Removal (+{years_proj} Yrs)", f"{projected_co2:,.0f} T", delta=f"{projected_co2 - gb_data['ghg_removal']:.0f} Growth")
     
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown("#### Species Distribution")
-        species_df = pd.DataFrame(list(gb_data['species'].items()), columns=['Species', 'Count'])
-        fig_tree = px.treemap(species_df, path=['Species'], values='Count', color='Count', color_continuous_scale='Greens')
-        fig_tree.update_layout(height=400, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_tree, use_container_width=True)
+        species_df = pd.DataFrame(list(filtered_species.items()), columns=['Species', 'Count'])
+        if not species_df.empty:
+            fig_tree = px.treemap(species_df, path=['Species'], values='Count', color='Count', color_continuous_scale='Greens')
+            fig_tree.update_layout(height=400, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_tree, use_container_width=True)
+        else:
+            st.warning("Select species to view distribution.")
+            
     with c2:
         st.markdown("#### Carbon Sink Status")
         fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number", value = gb_data['ghg_removal'],
+            mode = "gauge+number", value = projected_co2,
             title = {'text': "GHG Removal (Tons)"},
-            gauge = {'axis': {'range': [0, 15000]}, 'bar': {'color': "#00ff88"}}
+            gauge = {'axis': {'range': [0, 20000]}, 'bar': {'color': "#00ff88"}}
         ))
         fig_gauge.update_layout(height=300, margin=dict(t=0, l=20, r=20, b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
         st.plotly_chart(fig_gauge, use_container_width=True)
 
     st.markdown('<div class="section-header">🪨 Ash Utilization Analytics</div>', unsafe_allow_html=True)
+    
+    # Ash Interactivity
+    ash_scenario = st.slider("Simulate: Increase Brick Utilization (%)", 0, 50, 0)
+    
     a1, a2 = st.columns([2, 1])
     with a1:
         st.markdown("#### Generation vs Utilization Trend")
@@ -806,14 +742,14 @@ with tabs[9]:
         fig_ash.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_ash, use_container_width=True)
     with a2:
-        st.markdown("#### Utilization Breakdown")
+        st.markdown("#### Utilization Breakdown (Scenario)")
         latest = ash_df.iloc[-1]
-        pie_data_dict = {}
-        if 'Bricks' in ash_df.columns: pie_data_dict['Bricks'] = latest['Bricks']
-        if 'Cement' in ash_df.columns: pie_data_dict['Cement'] = latest['Cement']
-        if 'Dyke' in ash_df.columns: pie_data_dict['Dyke'] = latest['Dyke']
         
-        pie_data = pd.DataFrame(list(pie_data_dict.items()), columns=['Area', 'Value'])
+        # Apply scenario logic
+        base_bricks = latest['Bricks']
+        sim_bricks = base_bricks * (1 + ash_scenario/100)
+        
+        pie_data = pd.DataFrame({'Area': ['Bricks', 'Cement', 'Dyke'], 'Value': [sim_bricks, latest['Cement'], latest['Dyke']]})
         fig_pie = px.pie(pie_data, values='Value', names='Area', hole=0.4, template='plotly_dark', color_discrete_sequence=px.colors.sequential.RdBu)
         fig_pie.update_layout(height=350, margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_pie, use_container_width=True)
