@@ -99,10 +99,7 @@ def save_history(repo, df, sha):
 
 # --- ANALYTICS STATE HANDLING (JSON) ---
 def load_analytics_state(repo):
-    default_data = {
-        "greenbelt_raw": [], 
-        "ash_raw": []
-    }
+    default_data = {"greenbelt": {}, "ash_raw": []}
     if not repo: return default_data, None
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
@@ -119,50 +116,7 @@ def save_analytics_state(repo, data, sha):
         return True
     except: return False
 
-# --- PRECISION PARSERS (I5:BH26 Focused) ---
-def parse_plantation_file(uploaded_file):
-    try:
-        # Load header at row 5 (index 4) which contains Year and Species
-        df = pd.read_excel(uploaded_file, header=4) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=4)
-        
-        # Clean column names
-        df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
-        
-        # Find "Financial Year" (Anchor Column I)
-        year_col = next((c for c in df.columns if "Year" in c), None)
-        if not year_col: return []
-        
-        # Identify columns to keep (From I to BH approx)
-        # We look for numeric columns to the right of Year that are NOT metadata
-        exclude = ['Total', 'Survival', 'Remarks', 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed', 'Sl. No']
-        valid_species_cols = [c for c in df.columns if not any(x.lower() in str(c).lower() for x in exclude) and c != year_col]
-        
-        records = []
-        for _, row in df.iterrows():
-            yr = row[year_col]
-            # Stop if we hit "Total" row or empty year or "Matured" summary rows
-            if pd.isna(yr) or any(x in str(yr).lower() for x in ['total', 'matured', 'mortality']): continue
-            
-            for sp in valid_species_cols:
-                planted = row[sp]
-                if pd.notna(planted) and isinstance(planted, (int, float)) and planted > 0:
-                    # Logic: If 'Matured' data isn't explicitly in the cell (it's usually separate rows in this sheet format),
-                    # we estimate it or look for the corresponding Matured row.
-                    # For simplicity and robustness with single-table parsing:
-                    # We assume 90% survival if explicit matured data isn't joined.
-                    matured = int(planted * 0.9) 
-                    
-                    records.append({
-                        'Year': str(yr).strip(),
-                        'Species': str(sp).strip(),
-                        'Planted': int(planted),
-                        'Matured': matured
-                    })
-        return records
-    except Exception as e:
-        st.error(f"Plantation Parse Error: {e}")
-        return []
-
+# --- PARSERS ---
 def parse_ash_file(uploaded_file):
     try:
         df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
@@ -172,9 +126,7 @@ def parse_ash_file(uploaded_file):
             if any("month" in x for x in s) and any("generation" in x for x in s):
                 header_idx = i
                 break
-        
         df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
-        
         col_map = {}
         for c in df.columns:
             cl = str(c).lower()
@@ -184,7 +136,6 @@ def parse_ash_file(uploaded_file):
             else:
                 if "total" not in cl and "unnamed" not in cl:
                     col_map[str(c).strip()] = c
-        
         final_data = []
         for _, row in df.iterrows():
             if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
@@ -192,7 +143,6 @@ def parse_ash_file(uploaded_file):
             record['Month'] = row[col_map.get('Month')]
             record['Generation'] = row.get(col_map.get('Generation'), 0)
             record['Utilization'] = row.get(col_map.get('Utilization'), 0)
-            
             for key, col_name in col_map.items():
                 if key not in ['Month', 'Generation', 'Utilization']:
                     try: val = float(row[col_name])
@@ -204,9 +154,6 @@ def parse_ash_file(uploaded_file):
 
 def generate_excel_template():
     return pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
-
-def generate_bulk_template():
-    return pd.DataFrame({'Date': ['2024-01-01'], 'Unit': ['1'], 'Gen': [0], 'HR': [2300]})
 
 def format_lacs(value):
     val_lac = value / 100000
@@ -391,24 +338,15 @@ with st.sidebar:
             except Exception as e: st.error(f"Bulk Error: {e}")
 
     with st.expander("📂 Supplementary Reports (Analytics)"):
-        st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics.")
+        st.info("Upload 'Ash.xlsx' to update Ash Data. (Plantation is read from GitHub JSON)")
         supp_file = st.file_uploader("Upload Report", type=['xlsx', 'csv'])
         if supp_file:
             if "ash" in supp_file.name.lower():
                 ash_parsed = parse_ash_file(supp_file)
                 if ash_parsed:
                     analytics_state['ash_raw'] = ash_parsed
-                    # Fix: Pass SHA to update function
                     if save_analytics_state(repo, analytics_state, analytics_sha):
                         st.success("Ash Data Saved to GitHub!")
-                        st.rerun()
-            elif "plantation" in supp_file.name.lower():
-                plant_parsed = parse_plantation_file(supp_file)
-                if plant_parsed:
-                    analytics_state['greenbelt_raw'] = plant_parsed
-                    # Fix: Pass SHA to update function
-                    if save_analytics_state(repo, analytics_state, analytics_sha):
-                        st.success("Plantation Data Saved to GitHub!")
                         st.rerun()
 
     col_dl1, col_dl2 = st.columns(2)
@@ -628,6 +566,7 @@ with tabs[1]:
         st.markdown("#### 🌳 Greenbelt Reality Check")
         real_trees = 354762
         virtual_trees = green_trees + sum(u['trees'] for u in units_data) if units_data else 0
+        st.info("**Physical:** Actual trees planted. **Virtual:** CO2 reduction converted to 'Tree Equivalent'.")
         c_g1, c_g2 = st.columns(2)
         c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
         c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
@@ -792,83 +731,101 @@ with tabs[8]:
     with r3:
         st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
-# TAB 10: ANALYTICS (NEW & IMPROVED)
+# TAB 10: ANALYTICS (DEEP DIVE)
 with tabs[9]:
     st.markdown("### 📊 Interactive Analytics Playground")
     
-    # Load Data
-    gb_raw = analytics_state.get('greenbelt_raw', [])
+    # Load Data (Dict for GB, List for Ash)
+    gb_dict = analytics_state.get('greenbelt', {})
     ash_raw = analytics_state.get('ash_raw', [])
     
     # --- GREENBELT SECTION ---
-    if gb_raw:
-        df_gb = pd.DataFrame(gb_raw)
-        st.markdown('<div class="section-header">🌳 Greenbelt Simulator</div>', unsafe_allow_html=True)
+    if gb_dict:
+        st.markdown('<div class="section-header">🌳 Greenbelt Analytics</div>', unsafe_allow_html=True)
         
-        # 1. CONTROLS
-        c_gb1, c_gb2 = st.columns(2)
-        with c_gb1:
-            all_years = sorted(df_gb['Year'].unique(), reverse=True)
-            sel_year = st.selectbox("📅 Select Financial Year", all_years)
-        with c_gb2:
-            all_species = sorted(df_gb['Species'].unique())
-            sel_species = st.multiselect("🌿 Keep/Remove Species (Filter)", all_species, default=all_species[:5])
-        
-        # 2. FILTER & CALCULATE
-        df_yr = df_gb[df_gb['Year'] == sel_year]
-        if sel_species:
-            df_yr = df_yr[df_yr['Species'].isin(sel_species)]
+        # 1. PROCESS DATA
+        # Flatten dictionary to DataFrame for easier plotting
+        all_records = []
+        for species, data in gb_dict.items():
+            years_map = data.get('year_wise_plantation', {})
+            mortality = data.get('mortality_rate', 0.1)
+            carb_rate = data.get('carbon_sink_kg_per_year', 25)
             
-        total_planted = df_yr['Planted'].sum()
-        total_matured = df_yr['Matured'].sum()
-        avg_survival = (total_matured / total_planted * 100) if total_planted > 0 else 0
-        mortality = 100 - avg_survival
-        carb_sink = total_matured * 25 # 25kg/tree/year
-        carb_sink_ton = carb_sink / 1000
+            for yr, planted in years_map.items():
+                if planted > 0:
+                    matured = planted * (1 - mortality)
+                    all_records.append({
+                        'Year': yr, 'Species': species, 'Planted': planted, 'Matured': matured,
+                        'Carbon_Sink': matured * carb_rate
+                    })
         
-        # 3. METRICS CARDS
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Survival Rate", f"{avg_survival:.1f}%")
-        k2.metric("Mortality Rate", f"{mortality:.1f}%", delta_color="inverse")
-        k3.metric("Matured Alive", f"{total_matured:,}")
-        k4.metric("CO2 Sink Potential", f"{carb_sink_ton:,.1f} Tons/Yr")
+        df_gb = pd.DataFrame(all_records)
         
-        st.divider()
-        
-        # 4. SURVIVAL GRID (Multiple Donuts)
-        st.markdown("#### Species Survival Grid")
-        if not df_yr.empty:
-            # We create a grid of donut charts for each species
-            rows = (len(df_yr) // 4) + 1
-            fig_grid = make_subplots(rows=rows, cols=4, specs=[[{'type':'domain'}]*4]*rows, subplot_titles=df_yr['Species'].tolist())
+        if not df_gb.empty:
+            # 2. CONTROLS
+            c_gb1, c_gb2 = st.columns(2)
+            with c_gb1:
+                years_avail = sorted(df_gb['Year'].unique(), reverse=True)
+                sel_year = st.selectbox("📅 Select Financial Year", years_avail)
+            with c_gb2:
+                all_species = sorted(df_gb['Species'].unique())
+                sel_species = st.multiselect("🌿 Filter Species", all_species, default=all_species[:6])
             
-            for i, row in enumerate(df_yr.itertuples()):
-                r = (i // 4) + 1
-                c = (i % 4) + 1
-                fig_grid.add_trace(go.Pie(
-                    labels=['Alive', 'Dead'], 
-                    values=[row.Matured, row.Planted - row.Matured],
-                    name=row.Species,
-                    hole=0.6,
-                    marker_colors=['#00ff88', '#ff3333']
-                ), row=r, col=c)
+            # 3. FILTER
+            df_filtered = df_gb[df_gb['Species'].isin(sel_species)]
+            df_year_specific = df_filtered[df_filtered['Year'] == sel_year]
             
-            fig_grid.update_layout(height=rows*250, margin=dict(t=30, b=0, l=0, r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_grid, use_container_width=True)
-        else:
-            st.warning("No data for selected filter.")
+            # 4. METRICS
+            total_planted_yr = df_year_specific['Planted'].sum()
+            total_matured_yr = df_year_specific['Matured'].sum()
+            total_carbon_yr = df_year_specific['Carbon_Sink'].sum()
+            avg_mortality = 100 - ((total_matured_yr / total_planted_yr * 100) if total_planted_yr else 0)
+            
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric(f"Planted ({sel_year})", f"{total_planted_yr:,.0f}")
+            k2.metric("Matured Alive", f"{total_matured_yr:,.0f}")
+            k3.metric("Mortality Rate", f"{avg_mortality:.1f}%", delta_color="inverse")
+            k4.metric("Carbon Potential", f"{total_carbon_yr/1000:,.1f} T/Yr")
+            
+            st.divider()
+            
+            # 5. CHARTS - SURVIVAL GRID (Multiple Donuts)
+            st.markdown(f"#### Species Survival Grid ({sel_year})")
+            if not df_year_specific.empty:
+                # Limit to top 8 to avoid clutter
+                top_sp = df_year_specific.nlargest(8, 'Planted')
+                rows = (len(top_sp) // 4) + 1
+                fig_grid = make_subplots(rows=rows, cols=4, specs=[[{'type':'domain'}]*4]*rows, subplot_titles=top_sp['Species'].tolist())
+                
+                for i, row in enumerate(top_sp.itertuples()):
+                    r = (i // 4) + 1
+                    c = (i % 4) + 1
+                    fig_grid.add_trace(go.Pie(
+                        labels=['Alive', 'Dead'], 
+                        values=[row.Matured, row.Planted - row.Matured],
+                        name=row.Species, hole=0.5,
+                        marker_colors=['#00ff88', '#ff3333']
+                    ), row=r, col=c)
+                
+                fig_grid.update_layout(height=rows*250, margin=dict(t=30, b=0, l=0, r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_grid, use_container_width=True)
+            else:
+                st.warning("No plantation data for this selection.")
 
-        # 5. HEATMAP (Dynamic)
-        st.markdown("#### 🌡️ Plantation Heatmap")
-        hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
-        if hm_view == "Species vs Year":
-            fig_heat = px.density_heatmap(df_gb, x='Year', y='Species', z='Planted', color_continuous_scale='Greens')
-        else:
-            fig_heat = px.density_heatmap(df_gb, x='Species', y='Year', z='Planted', color_continuous_scale='Greens')
-        st.plotly_chart(fig_heat, use_container_width=True)
-
+            # 6. HEATMAP
+            st.markdown("#### 🌡️ Plantation Heatmap (All Years)")
+            hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
+            hm_metric = st.selectbox("Heatmap Metric", ["Planted", "Carbon_Sink"])
+            
+            if hm_view == "Species vs Year":
+                fig_heat = px.density_heatmap(df_filtered, x='Year', y='Species', z=hm_metric, color_continuous_scale='Greens')
+            else:
+                fig_heat = px.density_heatmap(df_filtered, x='Species', y='Year', z=hm_metric, color_continuous_scale='Greens')
+            st.plotly_chart(fig_heat, use_container_width=True)
+            
+        else: st.warning("No valid data found in Greenbelt JSON.")
     else:
-        st.info("Upload 'Plantation data.xlsx' to activate Greenbelt Analytics.")
+        st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
 
     # --- ASH SECTION ---
     st.divider()
@@ -876,27 +833,22 @@ with tabs[9]:
         df_ash = pd.DataFrame(ash_raw)
         st.markdown('<div class="section-header">🪨 Ash Utilization Analytics</div>', unsafe_allow_html=True)
         
-        # Controls
         ac1, ac2 = st.columns(2)
         with ac1:
             sel_month = st.selectbox("📅 Select Month", df_ash['Month'].unique())
         with ac2:
             sim_boost = st.slider("🚀 Simulate Efficiency Boost (%)", 0, 50, 0)
             
-        # Charts
         latest_ash = df_ash[df_ash['Month'] == sel_month].iloc[0]
-        # Identify columns
         ignore = ['Month', 'Generation', 'Utilization']
         valid_cols = [c for c in df_ash.columns if c not in ignore and isinstance(latest_ash[c], (int, float)) and latest_ash[c] > 0]
         
         c1, c2 = st.columns(2)
         with c1:
-            # Dynamic Pie
             pie_vals = {k: latest_ash[k] for k in valid_cols}
             fig_ash_pie = px.pie(values=list(pie_vals.values()), names=list(pie_vals.keys()), title=f"Utilization Split ({sel_month})", hole=0.4, template='plotly_dark')
             st.plotly_chart(fig_ash_pie, use_container_width=True)
         with c2:
-            # Stacked Area with Sim Line
             fig_area = px.area(df_ash, x='Month', y=valid_cols, title="Utilization Trend (All Months)", template='plotly_dark')
             # Sim line
             util_col = 'Utilization' if 'Utilization' in df_ash.columns else df_ash.columns[2]
