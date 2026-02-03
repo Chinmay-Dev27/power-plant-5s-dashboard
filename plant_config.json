@@ -1,0 +1,16 @@
+{
+  "u1_target_hr": 2315,
+  "u2_target_hr": 2315,
+  "u3_target_hr": 2315,
+  "u1_gcv": 3600,
+  "u2_gcv": 3550,
+  "u3_gcv": 3620,
+  "coal_ash_pct": 35.0,
+  "pond_cap": 500000,
+  "pond_curr": 350000,
+  "limits": {
+    "nox": 450,
+    "sox": 1400,
+    "spm": 50
+  }
+}
