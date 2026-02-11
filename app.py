@@ -80,8 +80,13 @@ def load_history(repo):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Date'] = pd.to_datetime(df['Date'])
+        # Hard Cutoff
         cutoff_date = pd.Timestamp("2026-01-31")
         df = df[df['Date'] <= cutoff_date]
+        
+        # MTD FIX: Remove duplicates immediately to prevent summation errors
+        df = df.drop_duplicates(subset=['Date', 'Unit'], keep='last')
+        
         return df, file.sha
     except: 
         return pd.DataFrame(), None
@@ -97,12 +102,12 @@ def save_history(repo, df, sha):
         return True
     except: return False
 
-# --- CONFIGURATION STATE HANDLING (New) ---
+# --- CONFIGURATION STATE HANDLING ---
 def get_default_config():
     return {
         "u1_target_hr": 2315, "u2_target_hr": 2315, "u3_target_hr": 2315,
         "u1_gcv": 3600, "u2_gcv": 3550, "u3_gcv": 3620,
-        "coal_ash_pct": 35.0, "pond_cap": 500000, "pond_curr": 350000,
+        "coal_ash_pct": 35.0, 
         "limits": {"nox": 450, "sox": 1400, "spm": 50}
     }
 
@@ -112,7 +117,6 @@ def load_plant_config(repo):
     try:
         file = repo.get_contents("plant_config.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
-        # Merge with default to ensure all keys exist
         return {**default, **data}, file.sha
     except:
         return default, None
@@ -125,136 +129,34 @@ def save_plant_config(repo, data, sha):
         return True
     except: return False
 
-# --- ANALYTICS STATE HANDLING (Smart Adapter) ---
+# --- ANALYTICS STATE HANDLING (JSON) ---
 def load_analytics_state(repo):
-    # FALLBACK DATA to ensure dashboard is never empty
     default_data = {
-        "greenbelt_raw": [{"Year": "2024-25", "Species": "Mixed", "Planted": 1000, "Matured": 900}], 
+        "greenbelt_raw": [], 
         "ash_raw": []
     }
-    
     if not repo: return default_data, None
-    
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
-        
-        # SMART ADAPTER: Convert Dictionary Style (Tree Keys) to List Style (DataFrame friendly)
-        # This handles the case where you pasted the 50-tree JSON directly
-        if "greenbelt_raw" not in data and len(data) > 2:
-            # Likely in "Pongamia": {...} format
-            converted_list = []
-            for species, details in data.items():
-                if isinstance(details, dict) and "year_wise_plantation" in details:
-                    for yr, count in details["year_wise_plantation"].items():
-                        if count > 0:
-                            mortality = details.get("mortality_rate", 0.1)
-                            matured = count * (1 - mortality)
-                            converted_list.append({
-                                "Year": yr,
-                                "Species": species,
-                                "Planted": count,
-                                "Matured": int(matured)
-                            })
-            if converted_list:
-                data = {"greenbelt_raw": converted_list, "ash_raw": []} # Reset ash if structure changed
-        
         return data, file.sha
     except:
         return default_data, None
 
-def save_analytics_state(repo, data, sha):
-    if not repo: return False
-    try:
-        if sha: repo.update_file("analytics_state_v1.json", "Update Analytics", json.dumps(data), sha, branch=st.secrets["BRANCH"])
-        else: repo.create_file("analytics_state_v1.json", "Init Analytics", json.dumps(data), branch=st.secrets["BRANCH"])
-        return True
-    except: return False
-
 # --- PARSERS ---
 def parse_plantation_file(uploaded_file):
+    # (Kept purely for future updates, currently we use JSON)
     try:
-        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
-        
-        # SMART SEARCH
-        header_idx = 0
-        for i, row in df_raw.iterrows():
-            s = row.astype(str).str.lower().tolist()
-            if any("pongamia" in x for x in s) or any("financial year" in x for x in s):
-                header_idx = i
-                break
-        
-        df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
-        df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
-        
-        year_col = next((c for c in df.columns if "Year" in c), None)
-        if not year_col: return []
-        
-        exclude = ['Total', 'Survival', 'Remarks', 'Mortality', 'Matured', 'Rate', 'nan', 'Unnamed', 'Sl. No']
-        species_cols = [c for c in df.columns if not any(x.lower() in str(c).lower() for x in exclude) and c != year_col]
-        
-        records = []
-        for _, row in df.iterrows():
-            yr = row[year_col]
-            if pd.isna(yr) or any(x in str(yr).lower() for x in ['total', 'matured', 'mortality']): continue
-            
-            for sp in species_cols:
-                planted = row[sp]
-                if pd.notna(planted) and isinstance(planted, (int, float)) and planted > 0:
-                    matured = int(planted * 0.9) 
-                    records.append({
-                        'Year': str(yr).strip(),
-                        'Species': str(sp).strip(),
-                        'Planted': int(planted),
-                        'Matured': matured
-                    })
-        return records
+        df = pd.read_excel(uploaded_file)
+        return [] # Placeholder as we rely on JSON
     except: return []
 
 def parse_ash_file(uploaded_file):
-    try:
-        df_raw = pd.read_excel(uploaded_file, header=None) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=None)
-        header_idx = 0
-        for i, row in df_raw.iterrows():
-            s = row.astype(str).str.lower().tolist()
-            if any("month" in x for x in s) and any("generation" in x for x in s):
-                header_idx = i
-                break
-        
-        df = pd.read_excel(uploaded_file, header=header_idx) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file, header=header_idx)
-        
-        col_map = {}
-        for c in df.columns:
-            cl = str(c).lower()
-            if "month" in cl: col_map['Month'] = c
-            elif "generation" in cl and "ash" in cl: col_map['Generation'] = c
-            elif "utilized" in cl and "ash" in cl: col_map['Utilization'] = c
-            else:
-                if "total" not in cl and "unnamed" not in cl:
-                    col_map[str(c).strip()] = c
-        
-        final_data = []
-        for _, row in df.iterrows():
-            if pd.isna(row.get(col_map.get('Month', ''), np.nan)): continue
-            record = {}
-            record['Month'] = row[col_map.get('Month')]
-            record['Generation'] = row.get(col_map.get('Generation'), 0)
-            record['Utilization'] = row.get(col_map.get('Utilization'), 0)
-            
-            for key, col_name in col_map.items():
-                if key not in ['Month', 'Generation', 'Utilization']:
-                    try: val = float(row[col_name])
-                    except: val = 0.0
-                    record[key] = val
-            final_data.append(record)
-        return final_data
-    except: return []
+    # (Kept purely for future updates)
+    return []
 
 def generate_excel_template():
     return pd.DataFrame({'Parameter': ['Gen (MU)', 'HR (kcal/kWh)', 'Vac (kg/cm2)', 'MS (C)', 'FG (C)', 'Spray (TPH)', 'SOx', 'NOx'], 'Unit 1': [0]*8, 'Unit 2': [0]*8, 'Unit 3': [0]*8})
-
-def generate_bulk_template():
-    return pd.DataFrame({'Date': ['2024-01-01'], 'Unit': ['1'], 'Gen': [0], 'HR': [2300]})
 
 def format_lacs(value):
     val_lac = value / 100000
@@ -442,25 +344,6 @@ with st.sidebar:
                     st.rerun()
             except Exception as e: st.error(f"Bulk Error: {e}")
 
-    with st.expander("📂 Supplementary Reports (Analytics)"):
-        st.info("Upload 'Ash.xlsx' or 'Plantation.xlsx' to update Analytics.")
-        supp_file = st.file_uploader("Upload Report", type=['xlsx', 'csv'])
-        if supp_file:
-            if "ash" in supp_file.name.lower():
-                ash_parsed = parse_ash_file(supp_file)
-                if ash_parsed:
-                    analytics_state['ash_raw'] = ash_parsed
-                    save_analytics_state(repo, analytics_state, analytics_sha)
-                    st.success("Ash Data Saved!")
-                    st.rerun()
-            elif "plantation" in supp_file.name.lower():
-                plant_parsed = parse_plantation_file(supp_file)
-                if plant_parsed:
-                    analytics_state['greenbelt_raw'] = plant_parsed
-                    save_analytics_state(repo, analytics_state, analytics_sha)
-                    st.success("Plantation Data Saved!")
-                    st.rerun()
-
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
         if units_data:
@@ -476,7 +359,7 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # --- CONFIG TAB (UPDATED) ---
+    # --- CONFIG TAB ---
     tab_conf, tab_inp = st.tabs(["⚙️ Config", "📝 Inputs"])
     with tab_conf:
         st.subheader("🏭 Plant Design Parameters")
@@ -490,17 +373,15 @@ with st.sidebar:
             t_u1 = st.number_input("U1 Target HR", value=plant_conf['u1_target_hr'])
             t_u2 = st.number_input("U2 Target HR", value=plant_conf['u2_target_hr'])
             t_u3 = st.number_input("U3 Target HR", value=plant_conf['u3_target_hr'])
-            pond_cap = st.number_input("Pond Max Cap", value=plant_conf['pond_cap'])
         
-        # Hidden GCVs for calculation
+        # Hidden GCVs
         g_u1, g_u2, g_u3 = plant_conf['u1_gcv'], plant_conf['u2_gcv'], plant_conf['u3_gcv']
-        pond_curr = st.number_input("Pond Stock", value=plant_conf['pond_curr'])
 
         if st.button("💾 Save Config Permanently"):
             new_conf = {
                 "u1_target_hr": t_u1, "u2_target_hr": t_u2, "u3_target_hr": t_u3,
                 "u1_gcv": g_u1, "u2_gcv": g_u2, "u3_gcv": g_u3,
-                "coal_ash_pct": coal_ash, "pond_cap": pond_cap, "pond_curr": pond_curr,
+                "coal_ash_pct": coal_ash,
                 "limits": {"nox": lim_nox, "sox": lim_sox, "spm": lim_spm}
             }
             if save_plant_config(repo, new_conf, conf_sha):
@@ -570,23 +451,14 @@ fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-pond_days_calc = 365.0
-date_in_ts = pd.Timestamp(date_in)
-if not hist_df.empty:
-    hist_sort = hist_df[hist_df['Date'] <= date_in_ts].sort_values('Date')
-    hist_sort['Ash Gen Calc'] = (hist_sort['Gen'] * hist_sort['HR'] * 1000 / 3600) * (hist_sort['Coal Ash %'] / 100)
-    cumulative_net_added_tons = hist_sort['Ash Gen Calc'].sum() - hist_sort['Ash Util'].sum()
-    current_capacity_tons = pond_cap - cumulative_net_added_tons
-    daily_net_dump = fleet_ash_gen - fleet_ash_util
-    if daily_net_dump > 0:
-        pond_days_left = current_capacity_tons / daily_net_dump
-    elif daily_net_dump < 0:
-        pond_days_left = 9999 
-    else:
-        pond_days_left = 365
+# ASH POND CALCULATION (User Defined 18 Months rule)
+# Total theoretical capacity (based on 18 months generation)
+daily_avg_gen = fleet_ash_gen if fleet_ash_gen > 0 else 5000 # Fallback
+total_pond_capacity_tons = daily_avg_gen * 18 * 30 # 18 months
+if daily_avg_gen > fleet_ash_util:
+    pond_days_left = total_pond_capacity_tons / (daily_avg_gen - fleet_ash_util)
 else:
-    current_capacity_tons = pond_cap
-    pond_days_left = 365
+    pond_days_left = 9999
 
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
@@ -595,7 +467,9 @@ green_trees = (bio_co2 + sol_co2) / 0.025
 solar_homes = (sol_u1 * 1000000) / 4
 bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
 
+# MTD CALC (FIXED)
 curr_month_start = pd.Timestamp(date_in.replace(day=1))
+date_in_ts = pd.Timestamp(date_in)
 if not hist_df.empty:
     mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] <= date_in_ts)]
     mtd_profit = mtd_df['Profit'].sum() if 'Profit' in mtd_df.columns else fleet_profit
@@ -629,12 +503,11 @@ with tabs[0]:
     display_info(r"""
     **Executive Summary:**
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
-    * **Shutdown Loss:** Standardized at 350MW capacity $\times$ 24h $\times$ ₹3/unit = ₹2.52 Cr per day.
-    * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
+    * **Ash Pond Days:** Based on User Rule: "Ponds fill in 18 months if utilization is 0".
     
-    **Key Formulas:**
+    **Formulas:**
     * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
-    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
+    * $$Remaining\_Days = \frac{Total\_Capacity}{Daily\_Gen - Daily\_Util}$$
     """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
@@ -657,21 +530,23 @@ with tabs[0]:
                         <div style="display:flex; justify-content:space-between;"><span>Target:</span><b>{u['target_hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Actual:</span><b>{u['hr']:.0f}</b></div>
                         <div style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            SOx: <span style="color:{'#EF4444' if u['sox']>600 else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
+                            SOx: <span style="color:{'#EF4444' if u['sox']>lim_sox else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     
     with cols[3]:
-        clr = "#00B981" if pond_days_left > 60 else "#EF4444"
-        display_days = f"{pond_days_left:.0f}" if pond_days_left < 9999 else "Increasing"
+        clr = "#00B981" if pond_days_left > 100 else "#EF4444"
+        display_days = f"{pond_days_left:.0f}" if pond_days_left < 9999 else "Stable (100% Util)"
         st.markdown(f"""
         <div class="glass-card" style="border-top: 4px solid {clr}">
             <div class="unit-header">ASH POND</div>
             <div class="big-val" style="color:{clr}">{display_days}</div>
-            <div class="sub-lbl">Days Left (Cumulative)</div>
-            <div style="font-size:11px; color:#aaa; margin-top:5px;">Cap: {pond_cap/1000:,.0f}k | Rem: {current_capacity_tons/1000:,.0f}k</div>
+            <div class="sub-lbl">Days Left</div>
+            <div style="font-size:10px; color:#aaa; margin-top:5px;">
+            Lagoon 1: 95 Acres | Lagoon 2: 90 Acres
+            </div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">📆 Monthly Performance (MTD)</div>', unsafe_allow_html=True)
@@ -684,15 +559,15 @@ with tabs[0]:
 with tabs[1]:
     display_info(r"""
     **Logic:**
-    * **SOx/NOx:** Real-time stack monitoring data.
-    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees" (actual count) vs "Virtual Offset" (equivalent trees needed for plant emissions).
+    * **SOx/NOx:** Real-time stack monitoring data vs CPCB Limits.
+    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees".
     """)
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🌍 Emissions Status")
         fleet_sox = sum(u['sox'] for u in units_data)/3 if units_data else 0
         st.metric("Avg SOx", f"{fleet_sox:.0f} mg/Nm3", delta=f"{lim_sox-fleet_sox:.0f} headroom")
-        if fleet_sox > lim_sox: st.error("⚠️ FLEET ACID RAIN RISK")
+        if fleet_sox > lim_sox: st.error("⚠️ FLEET SOx LIMIT EXCEEDED")
     with c2:
         st.markdown("#### 🌳 Greenbelt Reality Check")
         real_trees = 354762
@@ -746,7 +621,7 @@ if units_data:
 
 # TAB 8: TRENDS
 with tabs[7]:
-    display_info("Historical Performance Analysis.")
+    display_info("Historical Performance Analysis. Filters out shutdown days (HR < 100) to keep graph clean.")
     filter_opt = st.radio("Duration", ["7 Days", "30 Days"], horizontal=True)
     if not hist_df.empty:
         days_back = 7 if filter_opt=="7 Days" else 30
@@ -814,7 +689,6 @@ with tabs[9]:
         df_gb = pd.DataFrame(gb_raw)
         st.markdown('<div class="section-header">🌳 Greenbelt Simulator</div>', unsafe_allow_html=True)
         
-        # 1. CONTROLS
         c_gb1, c_gb2 = st.columns(2)
         with c_gb1:
             all_years = sorted(df_gb['Year'].unique(), reverse=True)
@@ -823,7 +697,6 @@ with tabs[9]:
             all_species = sorted(df_gb['Species'].unique())
             sel_species = st.multiselect("🌿 Keep/Remove Species (Filter)", all_species, default=all_species[:5])
         
-        # 2. FILTER & CALCULATE
         df_yr = df_gb[df_gb['Year'] == sel_year]
         if sel_species:
             df_yr = df_yr[df_yr['Species'].isin(sel_species)]
@@ -832,10 +705,9 @@ with tabs[9]:
         total_matured = df_yr['Matured'].sum()
         avg_survival = (total_matured / total_planted * 100) if total_planted > 0 else 0
         mortality = 100 - avg_survival
-        carb_sink = total_matured * 25 # 25kg/tree/year
+        carb_sink = total_matured * 25 
         carb_sink_ton = carb_sink / 1000
         
-        # 3. METRICS CARDS
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Survival Rate", f"{avg_survival:.1f}%")
         k2.metric("Mortality Rate", f"{mortality:.1f}%", delta_color="inverse")
@@ -844,21 +716,15 @@ with tabs[9]:
         
         st.divider()
         
-        # 4. CHARTS ROW 1 (PIE CHARTS)
         p1, p2 = st.columns(2)
         with p1:
             fig_mix = px.pie(df_yr, values='Planted', names='Species', title=f"Planted Mix ({sel_year})", hole=0.4, template='plotly_dark')
             st.plotly_chart(fig_mix, use_container_width=True)
         with p2:
-            # Create a "Survival Grid" - Mini Pies for each species
-            # We use a bar chart instead for cleaner comparison of survival vs death per species
-            df_melt = df_yr.melt(id_vars='Species', value_vars=['Matured', 'Planted'], var_name='Status', value_name='Count')
-            # Calculate Dead
             df_yr['Dead'] = df_yr['Planted'] - df_yr['Matured']
             fig_surv = px.bar(df_yr, x='Species', y=['Matured', 'Dead'], title="Survival vs Mortality by Species", barmode='stack', color_discrete_sequence=['#00ff88', '#ff3333'], template='plotly_dark')
             st.plotly_chart(fig_surv, use_container_width=True)
 
-        # 5. HEATMAP (Dynamic)
         st.markdown("#### 🌡️ Plantation Heatmap")
         hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
         if hm_view == "Species vs Year":
@@ -868,7 +734,7 @@ with tabs[9]:
         st.plotly_chart(fig_heat, use_container_width=True)
 
     else:
-        st.info("Upload 'Plantation data.xlsx' to activate Greenbelt Analytics.")
+        st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
 
     # --- ASH SECTION ---
     st.divider()
@@ -876,29 +742,23 @@ with tabs[9]:
         df_ash = pd.DataFrame(ash_raw)
         st.markdown('<div class="section-header">🪨 Ash Utilization Analytics</div>', unsafe_allow_html=True)
         
-        # Controls
         ac1, ac2 = st.columns(2)
         with ac1:
             sel_month = st.selectbox("📅 Select Month", df_ash['Month'].unique())
         with ac2:
             sim_boost = st.slider("🚀 Simulate Efficiency Boost (%)", 0, 50, 0)
             
-        # Charts
         latest_ash = df_ash[df_ash['Month'] == sel_month].iloc[0]
-        # Identify columns
         ignore = ['Month', 'Generation', 'Utilization']
         valid_cols = [c for c in df_ash.columns if c not in ignore and isinstance(latest_ash[c], (int, float)) and latest_ash[c] > 0]
         
         c1, c2 = st.columns(2)
         with c1:
-            # Dynamic Pie
             pie_vals = {k: latest_ash[k] for k in valid_cols}
             fig_ash_pie = px.pie(values=list(pie_vals.values()), names=list(pie_vals.keys()), title=f"Utilization Split ({sel_month})", hole=0.4, template='plotly_dark')
             st.plotly_chart(fig_ash_pie, use_container_width=True)
         with c2:
-            # Stacked Area with Sim Line
             fig_area = px.area(df_ash, x='Month', y=valid_cols, title="Utilization Trend (All Months)", template='plotly_dark')
-            # Sim line
             util_col = 'Utilization' if 'Utilization' in df_ash.columns else df_ash.columns[2]
             sim_line = df_ash[util_col] * (1 + sim_boost/100)
             fig_area.add_scatter(x=df_ash['Month'], y=sim_line, mode='lines', name='Simulated Target', line=dict(color='white', dash='dash'))
