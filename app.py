@@ -232,6 +232,11 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
 # --- 5. CALCULATION ENGINE ---
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
+    
+    # Calculate CO2 Emissions based on Coal Consumed
+    coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 and gen > 0 else 0
+    co2_emitted = coal_consumed * 1.7 # 1.7 Tons of CO2 per Ton of Coal
+    
     if gen <= 0 or hr <= 0:
         profit = -1 * (350 * 1000 * 24 * 3) 
         score = 0
@@ -252,7 +257,6 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
         score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
     
-    coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 and gen > 0 else 0
     ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
     ash_util = ash_params['util_cem'] + ash_params['util_brick']
     ash_stocked = ash_gen - ash_util
@@ -264,6 +268,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     
     return {
         "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts if status=="RUNNING" else 0, "carbon": carbon_tons if status=="RUNNING" else 0,
+        "co2_emitted": co2_emitted,
         "score": score, "sox": inputs['sox'], "nox": inputs['nox'],
         "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
         "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
@@ -505,7 +510,6 @@ else:
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
-green_trees = (bio_co2 + sol_co2) / 0.025
 solar_homes = (sol_u1 * 1000000) / 4
 bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
 
@@ -536,7 +540,7 @@ with c_top1:
 with c_top2:
     if st.button("📄 A4 PDF"):
         ash_d = {'gen':fleet_ash_gen, 'util':fleet_ash_util, 'pond_days':pond_days_left, 'bricks':sum(u['ash']['bricks_made'] for u in units_data) if units_data else 0, 'burj_pct':sum(u['ash']['burj_pct'] for u in units_data) if units_data else 0}
-        grn_d = {'bio_co2':total_bio*1.7, 'sol_co2':sol_u1*950, 'trees':(total_bio*1.7)/0.025}
+        grn_d = {'bio_co2':bio_co2, 'sol_co2':sol_co2, 'trees':bio_co2/0.025}
         pdf_b = create_full_pdf(units_data, fleet_profit, ash_d, grn_d)
         b64 = base64.b64encode(pdf_b).decode()
         st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="GMR_Report.pdf">Download</a>', unsafe_allow_html=True)
@@ -544,7 +548,8 @@ with c_top2:
 # TABS
 tabs = st.tabs(["🏠 War Room", "🌿 Sustainability", "🪨 Ash Ops", "☀️ Green", "⚙️ Unit 1", "⚙️ Unit 2", "⚙️ Unit 3", "📈 Trends", "🎮 Sim", "📊 Analytics", "ℹ️ Info"])
 
-with tabs[0]: # War Room
+# TAB 1: WAR ROOM
+with tabs[0]:
     display_info(r"""
     **Executive Summary:**
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
@@ -594,28 +599,76 @@ with tabs[0]: # War Room
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("MTD Fleet Profit", format_lacs(mtd_profit))
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash:,.0f} Tons")
-    c_m3.info("MTD Data aggregates from 1st of month to selected date.")
+    c_m3.info("MTD Data aggregates strictly from the 1st of the month.")
 
-# TAB 2: COMPLIANCE
+# TAB 2: SUSTAINABILITY (TRUE CARBON FOOTPRINT)
 with tabs[1]:
     display_info(r"""
-    **Logic:**
-    * **SOx/NOx:** Real-time stack monitoring data vs CPCB Limits.
-    * **Greenbelt:** Converts CO2 offset from trees into "Physical Trees".
+    **Sustainability & Carbon Footprint:**
+    * **Daily CO₂ Emissions:** Calculated as `Coal Consumed (Tons) × 1.7`.
+    * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`.
+    * **Area Required:** Assumes approx 1000 trees per acre for new plantations to offset the deficit.
     """)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("#### 🌍 Emissions Status")
-        fleet_sox = sum(u['sox'] for u in units_data)/3 if units_data else 0
-        st.metric("Avg SOx", f"{fleet_sox:.0f} mg/Nm3", delta=f"{plant_conf['limits']['sox']-fleet_sox:.0f} headroom")
-        if fleet_sox > plant_conf['limits']['sox']: st.error("⚠️ FLEET SOx LIMIT EXCEEDED")
-    with c2:
-        st.markdown("#### 🌳 Greenbelt Reality Check")
+    st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
+    cols = st.columns(3)
+    total_daily_co2 = 0
+    for i, u in enumerate(units_data):
+        u_co2 = u.get('co2_emitted', 0)
+        total_daily_co2 += u_co2
+        with cols[i]:
+            st.markdown(f"""
+            <div class="glass-card border-bad">
+                <div class="unit-header">UNIT {u['id']}</div>
+                <div class="big-val" style="color:#EF4444">{u_co2:,.0f} T</div>
+                <div class="sub-lbl">CO₂ Emitted Today</div>
+            </div>""", unsafe_allow_html=True)
+            
+    st.markdown("#### 🌍 Fleet Combined Effect vs Tree Offset")
+    gb_raw = analytics_state.get('greenbelt_raw', [])
+    if gb_raw:
+        df_gb = pd.DataFrame(gb_raw)
+        real_trees = df_gb['Matured'].sum() if 'Matured' in df_gb.columns else 354762
+    else:
         real_trees = 354762
-        virtual_trees = green_trees + sum(u['trees'] for u in units_data) if units_data else 0
-        c_g1, c_g2 = st.columns(2)
-        c_g1.metric("Physical Trees", f"{real_trees:,.0f}")
-        c_g2.metric("Virtual Offset", f"{virtual_trees:,.0f}")
+        
+    daily_offset_tons = real_trees * (25.0 / 365.0 / 1000.0)
+    net_daily_co2 = total_daily_co2 - daily_offset_tons
+    
+    c_net1, c_net2, c_net3 = st.columns(3)
+    c_net1.metric("Total CO₂ Emitted", f"{total_daily_co2:,.0f} T")
+    c_net2.metric("Trees CO₂ Offset", f"{daily_offset_tons:,.2f} T", "Greenbelt")
+    c_net3.metric("Net CO₂ Footprint", f"{net_daily_co2:,.0f} T", delta=f"-{daily_offset_tons:.2f} T offset", delta_color="inverse")
+    
+    st.divider()
+    st.markdown("#### 📆 MTD Carbon Offset & Remediation Plan")
+    
+    past_co2_emitted = 0
+    if not hist_df.empty:
+        past_mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] < date_in_ts)].copy()
+        if not past_mtd_df.empty:
+            # Assume average fleet GCV of ~3585 for past calculations if not explicitly stored
+            past_mtd_df['Coal_Tons'] = (past_mtd_df['Gen'] * past_mtd_df['HR'] * 1000) / 3585
+            past_co2_emitted = (past_mtd_df['Coal_Tons'] * 1.7).sum()
+    
+    mtd_co2_emitted = past_co2_emitted + total_daily_co2
+    days_mtd = (date_in_ts - curr_month_start).days + 1
+    mtd_offset = daily_offset_tons * days_mtd
+    mtd_deficit = mtd_co2_emitted - mtd_offset
+    
+    if mtd_deficit > 0:
+        offset_per_tree_mtd = (25.0 / 365.0) * days_mtd / 1000.0
+        trees_needed = mtd_deficit / offset_per_tree_mtd if offset_per_tree_mtd > 0 else 0
+        area_needed_acres = trees_needed / 1000.0
+        
+        st.warning(f"⚠️ **Carbon Deficit Alert:** Your trees offset only **{(mtd_offset/mtd_co2_emitted*100) if mtd_co2_emitted>0 else 0:.3f}%** of MTD emissions.")
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("MTD CO₂ Emitted", f"{mtd_co2_emitted:,.0f} T")
+        m2.metric("Additional Trees Needed", f"{trees_needed:,.0f}")
+        m3.metric("Land Area Required", f"{area_needed_acres:,.0f} Acres")
+    else:
+        st.success("🌿 **Carbon Neutral!** Your greenbelt has successfully offset all MTD emissions.")
+        st.metric("MTD Net CO₂", f"{mtd_deficit:,.0f} T")
 
 # TAB 3: ASH OPS (VISUAL REDESIGN)
 with tabs[2]:
@@ -697,6 +750,10 @@ if units_data:
             **Unit Performance:**
             * **Loss Analysis:** Breakdown of Heat Rate deviation sources (Vacuum, Temp, Spray).
             * **5S Score:** Technical hygiene score based on parameter adherence.
+            
+            **Loss Formulas (Approx):**
+            * Vacuum: 15 kcal/kWh per 0.01 deviation.
+            * MS Temp: 0.7 kcal/kWh per degree deviation.
             """)
             u = units_data[i]
             render_unit_detail(u, configs)
@@ -731,8 +788,10 @@ with tabs[8]:
     st.markdown("### 🎮 Simulator")
     display_info(r"""
     **Simulation Logic:**
+    Adjust parameters to see the instant impact on **Net Heat Rate** and **Daily Profit**.
     * **Vacuum:** Lower (more negative) is better.
-    * **APC:** Auxiliary Power Consumption.
+    * **APC:** Auxiliary Power Consumption directly reduces salable power.
+    * **GCV:** Gross Calorific Value of coal affects fuel quantity needed.
     """)
     s_c1, s_c2, s_c3 = st.columns(3)
     with s_c1:
@@ -758,19 +817,19 @@ with tabs[8]:
     with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
     with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
-# TAB 10: ANALYTICS (ADAPTED FOR DICT STRUCTURE)
+# TAB 10: ANALYTICS
 with tabs[9]:
     st.markdown("### 📊 Interactive Analytics Playground")
-    
-    # Load Data (Dict for GB, List for Ash)
+
+    # Load Data
     gb_raw = analytics_state.get('greenbelt_raw', [])
     ash_raw = analytics_state.get('ash_raw', [])
-    
+
     # --- GREENBELT SECTION ---
     if gb_raw:
         df_gb = pd.DataFrame(gb_raw)
         st.markdown('<div class="section-header">🌳 Greenbelt Simulator</div>', unsafe_allow_html=True)
-        
+
         # 1. CONTROLS
         c_gb1, c_gb2 = st.columns(2)
         with c_gb1:
@@ -779,35 +838,35 @@ with tabs[9]:
         with c_gb2:
             all_species = sorted(df_gb['Species'].unique())
             sel_species = st.multiselect("🌿 Keep/Remove Species (Filter)", all_species, default=all_species[:5])
-        
+
         # 2. FILTER & CALCULATE
         df_yr = df_gb[df_gb['Year'] == sel_year]
         if sel_species:
             df_yr = df_yr[df_yr['Species'].isin(sel_species)]
-            
+
         total_planted = df_yr['Planted'].sum()
         total_matured = df_yr['Matured'].sum()
         avg_survival = (total_matured / total_planted * 100) if total_planted > 0 else 0
         mortality = 100 - avg_survival
-        carb_sink = total_matured * 25 
+        carb_sink = total_matured * 25 # 25kg/tree/year
         carb_sink_ton = carb_sink / 1000
-        
+
         # 3. METRICS CARDS
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Survival Rate", f"{avg_survival:.1f}%")
         k2.metric("Mortality Rate", f"{mortality:.1f}%", delta_color="inverse")
         k3.metric("Matured Alive", f"{total_matured:,}")
         k4.metric("CO2 Sink Potential", f"{carb_sink_ton:,.1f} Tons/Yr")
-        
+
         st.divider()
-        
+
         # 4. CHARTS ROW 1 (PIE CHARTS)
         p1, p2 = st.columns(2)
         with p1:
             fig_mix = px.pie(df_yr, values='Planted', names='Species', title=f"Planted Mix ({sel_year})", hole=0.4, template='plotly_dark')
             st.plotly_chart(fig_mix, use_container_width=True)
         with p2:
-            # Create a "Survival Grid" - Mini Pies for each species
+            # Create a "Survival Grid"
             df_yr['Dead'] = df_yr['Planted'] - df_yr['Matured']
             fig_surv = px.bar(df_yr, x='Species', y=['Matured', 'Dead'], title="Survival vs Mortality by Species", barmode='stack', color_discrete_sequence=['#00ff88', '#ff3333'], template='plotly_dark')
             st.plotly_chart(fig_surv, use_container_width=True)
@@ -822,30 +881,35 @@ with tabs[9]:
         st.plotly_chart(fig_heat, use_container_width=True)
 
     else:
-        st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
+        st.info("Upload 'Plantation data.xlsx' to activate Greenbelt Analytics.")
 
     # --- ASH SECTION ---
     st.divider()
     if ash_raw:
         df_ash = pd.DataFrame(ash_raw)
         st.markdown('<div class="section-header">🪨 Ash Utilization Analytics</div>', unsafe_allow_html=True)
-        
+
+        # Controls
         ac1, ac2 = st.columns(2)
         with ac1:
             sel_month = st.selectbox("📅 Select Month", df_ash['Month'].unique())
         with ac2:
             sim_boost = st.slider("🚀 Simulate Efficiency Boost (%)", 0, 50, 0)
-            
+
+        # Charts
         latest_ash = df_ash[df_ash['Month'] == sel_month].iloc[0]
+        # Identify columns
         ignore = ['Month', 'Generation', 'Utilization']
         valid_cols = [c for c in df_ash.columns if c not in ignore and isinstance(latest_ash[c], (int, float)) and latest_ash[c] > 0]
-        
+
         c1, c2 = st.columns(2)
         with c1:
+            # Dynamic Pie
             pie_vals = {k: latest_ash[k] for k in valid_cols}
             fig_ash_pie = px.pie(values=list(pie_vals.values()), names=list(pie_vals.keys()), title=f"Utilization Split ({sel_month})", hole=0.4, template='plotly_dark')
             st.plotly_chart(fig_ash_pie, use_container_width=True)
         with c2:
+            # Stacked Area with Sim Line
             fig_area = px.area(df_ash, x='Month', y=valid_cols, title="Utilization Trend (All Months)", template='plotly_dark')
             util_col = 'Utilization' if 'Utilization' in df_ash.columns else df_ash.columns[2]
             sim_line = df_ash[util_col] * (1 + sim_boost/100)
