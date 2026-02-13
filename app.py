@@ -25,33 +25,33 @@ st.set_page_config(page_title="GMR 5S Dashboard", layout="wide", page_icon="⚡"
 # Import Professional Fonts
 components.html(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Oswald:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Oswald:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
     """,
     height=0,
 )
 
-# --- 2. VISUAL OVERHAUL (BRIGHTER FONTS) ---
+# --- 2. VISUAL OVERHAUL (SOLID BRIGHT FONTS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; font-family: 'Roboto', sans-serif; }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 50px; }
-    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #f8fafc; font-weight: 600; font-size: 16px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; background-color: transparent; border-radius: 20px; color: #ffffff; font-weight: 700; font-size: 16px; }
     .stTabs [aria-selected="true"] { background-color: #F59E0B; color: white; }
-    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; transition: transform 0.2s ease; }
-    .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.4); }
+    .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); text-align: center; transition: transform 0.2s ease; }
+    .glass-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.5); }
     .border-good { border-top: 4px solid #4ade80; }
     .border-bad { border-top: 4px solid #f87171; }
-    .border-shut { border-top: 4px solid #94a3b8; }
+    .border-shut { border-top: 4px solid #ffffff; }
     .border-green { border-top: 4px solid #34d399; }
     .border-solar { border-top: 4px solid #fde047; }
     .big-val { font-family: 'Orbitron', sans-serif; font-size: 28px; font-weight: 700; color: #ffffff; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }
-    .sub-lbl { font-size: 13px; color: #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-top: 5px; }
-    .section-header { font-family: 'Oswald', sans-serif; font-size: 24px; color: #fcd34d; margin: 20px 0 10px 0; border-bottom: 1px solid #444; padding-bottom: 5px; }
-    .unit-header { font-size: 15px; font-weight: 800; color: #f8fafc; margin-bottom: 10px; letter-spacing: 1px;}
+    .sub-lbl { font-size: 13px; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-top: 5px; }
+    .section-header { font-family: 'Oswald', sans-serif; font-size: 24px; color: #fcd34d; margin: 20px 0 10px 0; border-bottom: 1px solid #ffffff; padding-bottom: 5px; }
+    .unit-header { font-size: 15px; font-weight: 800; color: #ffffff; margin-bottom: 10px; letter-spacing: 1px;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. GLOBAL HELPERS ---
+# --- 3. GLOBAL HELPERS (RESTORED FORMULAS) ---
 def display_info(details):
     with st.expander("ℹ️ How to Read This Tab (Calculations & Logic)"):
         st.markdown(details)
@@ -108,7 +108,7 @@ def get_default_config():
     return {
         "u1_target_hr": 2315, "u2_target_hr": 2315, "u3_target_hr": 2315,
         "u1_gcv": 3600, "u2_gcv": 3550, "u3_gcv": 3620,
-        "coal_ash_pct": 35.0, "pond_cap": 500000, "pond_curr": 350000,
+        "coal_ash_pct": 35.0, 
         "limits": {"nox": 450, "sox": 1400, "spm": 50}
     }
 
@@ -132,16 +132,11 @@ def save_plant_config(repo, data, sha):
 
 # --- ANALYTICS STATE HANDLING ---
 def load_analytics_state(repo):
-    default_data = {
-        "greenbelt_raw": [], 
-        "ash_raw": []
-    }
+    default_data = {"greenbelt_raw": [], "ash_raw": []}
     if not repo: return default_data, None
-    
     try:
         file = repo.get_contents("analytics_state_v1.json", ref=st.secrets["BRANCH"])
         data = json.loads(file.decoded_content.decode())
-        
         if "greenbelt_raw" not in data and len(data) > 2:
             converted_list = []
             for species, details in data.items():
@@ -158,7 +153,6 @@ def load_analytics_state(repo):
                             })
             if converted_list:
                 data = {"greenbelt_raw": converted_list, "ash_raw": data.get("ash_raw", [])} 
-        
         return data, file.sha
     except:
         return default_data, None
@@ -214,13 +208,6 @@ def create_full_pdf(units, fleet_pnl, ash_data, green_data):
         pdf.cell(30, 10, str(u['sox']), 1)
         pdf.cell(30, 10, str(u['nox']), 1)
         pdf.ln()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "Environment & Ash", 0, 1)
-    pdf.ln(5)
-    pdf.set_font("Arial", size=10)
-    pdf.cell(0, 10, f"Ash Gen: {ash_data['gen']:.0f} T | Util: {ash_data['util']:.0f} T", 0, 1)
-    pdf.cell(0, 10, f"Solar CO2 Saved: {green_data['sol_co2']:.2f} T", 0, 1)
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. CALCULATION ENGINE ---
@@ -284,7 +271,7 @@ def render_unit_detail(u, configs):
             mode = "gauge+number+delta", value = u['hr'],
             delta = {'reference': target, 'increasing': {'color': "#ef4444"}},
             gauge = {
-                'axis': {'range': [2000, 2600]}, 'bar': {'color': "#38bdf8"},
+                'axis': {'range': [2000, 2600], 'tickfont': {'color': 'white'}}, 'bar': {'color': "#38bdf8"},
                 'steps': [{'range': [2000, target], 'color': "rgba(0,255,0,0.2)"}, {'range': [target, 2600], 'color': "rgba(255,0,0,0.2)"}],
                 'threshold': {'line': {'color': "#ef4444", 'width': 4}, 'thickness': 0.75, 'value': u['hr']}
             }
@@ -295,17 +282,17 @@ def render_unit_detail(u, configs):
         st.markdown("#### 🔧 Loss Analysis")
         loss_df = pd.DataFrame(list(u['losses'].items()), columns=['Param', 'Loss']).sort_values('Loss')
         fig_bar = px.bar(loss_df, x='Loss', y='Param', orientation='h', text='Loss', color='Loss', 
-                         color_continuous_scale=['#444', '#ef4444'], template='plotly_dark')
+                         color_continuous_scale=['#ffffff', '#ef4444'], template='plotly_dark')
         fig_bar.update_layout(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', height=250,
-            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False)
+            xaxis=dict(showgrid=False, tickfont=dict(color='white')), yaxis=dict(showgrid=False, tickfont=dict(color='white'))
         )
-        fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside', textfont=dict(color='white'))
         st.plotly_chart(fig_bar, width="stretch", key=f"bar_{u['id']}")
     st.divider()
     c3, c4 = st.columns(2)
-    with c3: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #fcd34d"><div class="p-title" style="color:#f8fafc; font-weight:800;">5S Score</div><div class="big-val" style="color:#fcd34d">{u['score']:.1f}</div><div class="sub-lbl">Technical Hygiene</div></div>""", unsafe_allow_html=True)
-    with c4: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #38bdf8"><div class="p-title" style="color:#f8fafc; font-weight:800;">Carbon Credits</div><div class="big-val" style="color:#38bdf8">{u['carbon']:.1f}</div><div class="sub-lbl">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #fcd34d"><div class="p-title" style="color:#ffffff; font-weight:800;">5S Score</div><div class="big-val" style="color:#fcd34d">{u['score']:.1f}</div><div class="sub-lbl" style="color:#ffffff;">Technical Hygiene</div></div>""", unsafe_allow_html=True)
+    with c4: st.markdown(f"""<div class="glass-card" style="border-left: 4px solid #38bdf8"><div class="p-title" style="color:#ffffff; font-weight:800;">Carbon Credits</div><div class="big-val" style="color:#38bdf8">{u['carbon']:.1f}</div><div class="sub-lbl" style="color:#ffffff;">Tons CO2 Avoided</div></div>""", unsafe_allow_html=True)
 
 # --- 7. SIDEBAR & DATA LOADING ---
 with st.sidebar:
@@ -333,14 +320,12 @@ with st.sidebar:
     
     with st.expander("📤 Upload Operational Data"):
         uploaded_file = st.file_uploader("Daily Input", type=['xlsx', 'csv'])
-        daily_defaults = {}
         if uploaded_file:
             try:
                 df_up = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
                 if 'Parameter' in df_up.columns:
                     df_up.set_index('Parameter', inplace=True)
-                    daily_defaults = df_up.to_dict()
-                    st.session_state['daily_data'] = daily_defaults
+                    st.session_state['daily_data'] = df_up.to_dict()
                     st.toast("Daily Data Applied", icon="✅")
             except: st.error("Read Error")
             
@@ -382,19 +367,6 @@ with st.sidebar:
                     st.success("Plantation Data Saved!")
                     st.rerun()
 
-    col_dl1, col_dl2 = st.columns(2)
-    with col_dl1:
-        if units_data:
-            pre_data_dict = {'Parameter': generate_excel_template()['Parameter']}
-            for u in units_data:
-                idx = int(u['id'])-1
-                inp = u['inputs']
-                vals = [u['gen'], u['hr'], inp['vac'], inp['ms'], inp['fg'], inp['spray'], u['sox'], u['nox'], u['ash']['cem_util'], u['ash']['brick_util'], (bio_u1 if idx==0 else (bio_u2 if idx==1 else bio_u3)), (sol_u1 if idx==0 else 0)]
-                pre_data_dict[f"Unit {u['id']}"] = vals
-            out_d = BytesIO()
-            pd.DataFrame(pre_data_dict).to_excel(out_d, index=False, engine='openpyxl', sheet_name='DailyData')
-            st.download_button("📥 Daily (Pre-filled)", out_d.getvalue(), "daily_prefilled.xlsx")
-
     st.markdown("---")
     
     # --- CONFIG TAB ---
@@ -411,16 +383,14 @@ with st.sidebar:
             t_u1 = st.number_input("U1 Target HR", value=plant_conf['u1_target_hr'])
             t_u2 = st.number_input("U2 Target HR", value=plant_conf['u2_target_hr'])
             t_u3 = st.number_input("U3 Target HR", value=plant_conf['u3_target_hr'])
-        
+
         g_u1, g_u2, g_u3 = plant_conf['u1_gcv'], plant_conf['u2_gcv'], plant_conf['u3_gcv']
-        pond_cap = plant_conf.get('pond_cap', 500000)
-        pond_curr = st.number_input("Pond Current Stock", value=plant_conf.get('pond_curr', 350000))
 
         if st.button("💾 Save Config Permanently"):
             new_conf = {
                 "u1_target_hr": t_u1, "u2_target_hr": t_u2, "u3_target_hr": t_u3,
                 "u1_gcv": g_u1, "u2_gcv": g_u2, "u3_gcv": g_u3,
-                "coal_ash_pct": coal_ash, "pond_cap": pond_cap, "pond_curr": pond_curr,
+                "coal_ash_pct": coal_ash,
                 "limits": {"nox": lim_nox, "sox": lim_sox, "spm": lim_spm}
             }
             if save_plant_config(repo, new_conf, conf_sha):
@@ -452,9 +422,9 @@ with st.sidebar:
                 spray = st.number_input(f"U{u} Spray", value=val(u, 'Spray (TPH)', 'Spray', 20.0), key=f"s{u}_{d_key}")
                 sox = st.number_input(f"U{u} SOx", value=val(u, 'SOx (mg/Nm3)', 'SOx', 550.0), key=f"sx{u}_{d_key}")
                 nox = st.number_input(f"U{u} NOx", value=val(u, 'NOx (mg/Nm3)', 'NOx', 400.0), key=f"nx{u}_{d_key}")
-                ash_cem = st.number_input(f"U{u} to Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
-                ash_brk = st.number_input(f"U{u} to Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
-                ash_p = {'ash_pct': val(u, 'Ash %', 'Coal Ash %', coal_ash), 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
+                ash_cem = st.number_input(f"U{u} Cement", value=val(u, 'Ash to Cement (Tons)', 'Ash Cement', 1000.0), key=f"ac{u}_{d_key}")
+                ash_brk = st.number_input(f"U{u} Bricks", value=val(u, 'Ash to Bricks (Tons)', 'Ash Bricks', 500.0), key=f"ab{u}_{d_key}")
+                ash_p = {'ash_pct': coal_ash, 'util_cem': ash_cem, 'util_brick': ash_brk, 'biomass': val(u, 'Biomass (Tons)', 'Biomass', 0.0)}
                 units_data.append(calculate_unit(u, gen, hr, {'vac':vac, 'ms':ms, 'fg':fg, 'spray':spray, 'sox':sox, 'nox':nox}, configs[i-1], ash_p))
 
         st.markdown("---")
@@ -485,22 +455,17 @@ with st.sidebar:
             st.success("Saved!")
         else: st.error("No Repo")
 
-# --- CALCS & CUMULATIVE ASH POND ---
+# --- CALCS & CUMULATIVE POND ---
 fleet_profit = sum(u['profit'] for u in units_data) if units_data else 0
 fleet_ash_gen = sum(u['ash']['generated'] for u in units_data) if units_data else 0
 fleet_ash_util = sum(u['ash']['utilized'] for u in units_data) if units_data else 0
 
-# --- ASH YTD & MTD LOGIC FOR VISUALS ---
-curr_month_start = pd.Timestamp(date_in.replace(day=1))
+# --- ASH YTD/MTD & LAGOON LOGIC ---
 date_in_ts = pd.Timestamp(date_in)
+curr_month_start = pd.Timestamp(date_in.replace(day=1))
+fy_start = pd.Timestamp(year=date_in.year, month=4, day=1) if date_in.month >= 4 else pd.Timestamp(year=date_in.year-1, month=4, day=1)
 
-if date_in.month >= 4:
-    fy_start = pd.Timestamp(year=date_in.year, month=4, day=1)
-else:
-    fy_start = pd.Timestamp(year=date_in.year-1, month=4, day=1)
-
-# Historical calculations (STRICTLY before today)
-past_mtd_ash_gen, past_mtd_ash_util, past_ytd_ash_gen, past_ytd_ash_util, past_mtd_profit = 0, 0, 0, 0, 0
+past_mtd_ash_gen = past_ytd_ash_gen = past_mtd_ash_util = past_ytd_ash_util = past_mtd_profit = 0
 
 if not hist_df.empty:
     past_mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] < date_in_ts)].copy()
@@ -517,22 +482,31 @@ if not hist_df.empty:
     past_mtd_ash_util = past_mtd_df['Ash Util'].sum() if not past_mtd_df.empty else 0
     past_ytd_ash_util = past_ytd_df['Ash Util'].sum() if not past_ytd_df.empty else 0
 
-# Add live inputs to get TRUE MTD/YTD
+# TRUE Current Totals (History + Live Today)
 mtd_ash_gen_total = past_mtd_ash_gen + fleet_ash_gen
 ytd_ash_gen_total = past_ytd_ash_gen + fleet_ash_gen
 mtd_ash_util_total = past_mtd_ash_util + fleet_ash_util
 ytd_ash_util_total = past_ytd_ash_util + fleet_ash_util
+mtd_profit = past_mtd_profit + fleet_profit
 
 mtd_dump = mtd_ash_gen_total - mtd_ash_util_total
 ytd_dump = ytd_ash_gen_total - ytd_ash_util_total
-mtd_profit = past_mtd_profit + fleet_profit
 
-# Dynamic Lagoon Impact Logic
-total_pond_cap = pond_cap if pond_cap else 500000
-current_pond_stock = pond_curr + ytd_dump
-lagoon_fill_pct = min(100, max(0, (current_pond_stock / total_pond_cap) * 100))
+# Dynamic Lagoon Tracking
+# Rule: Lagoons fill in 18 months (~540 days) if 0% utilization.
+daily_avg_gen = fleet_ash_gen if fleet_ash_gen > 0 else 5000 
+total_pond_capacity_tons = daily_avg_gen * 540 
 
-# Renewables
+# Fill % is based on accumulated dump vs capacity. 
+# We simulate a starting fill of 50%, adding the YTD accumulation.
+simulated_starting_fill = total_pond_capacity_tons * 0.50 
+current_lagoon_volume = simulated_starting_fill + ytd_dump
+lagoon_fill_pct = max(0, min(100, (current_lagoon_volume / total_pond_capacity_tons) * 100))
+
+# Days left logic for War Room
+daily_net_dump = fleet_ash_gen - fleet_ash_util
+pond_days_left = (total_pond_capacity_tons - current_lagoon_volume) / daily_net_dump if daily_net_dump > 0 else 9999
+
 total_bio = bio_u1 + bio_u2 + bio_u3
 bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
 sol_co2 = sol_u1 * 1000 * 0.95
@@ -546,7 +520,7 @@ with c_top1:
     st.markdown(f"**Date:** {date_in.strftime('%d-%b-%Y')} | **Fleet P&L:** {format_lacs(fleet_profit)}")
 with c_top2:
     if st.button("📄 A4 PDF"):
-        ash_d = {'gen':fleet_ash_gen, 'util':fleet_ash_util, 'pond_days':9999, 'bricks':sum(u['ash']['bricks_made'] for u in units_data) if units_data else 0, 'burj_pct':sum(u['ash']['burj_pct'] for u in units_data) if units_data else 0}
+        ash_d = {'gen':fleet_ash_gen, 'util':fleet_ash_util, 'pond_days':pond_days_left, 'bricks':sum(u['ash']['bricks_made'] for u in units_data) if units_data else 0, 'burj_pct':sum(u['ash']['burj_pct'] for u in units_data) if units_data else 0}
         grn_d = {'bio_co2':bio_co2, 'sol_co2':sol_co2, 'trees':bio_co2/0.025}
         pdf_b = create_full_pdf(units_data, fleet_profit, ash_d, grn_d)
         b64 = base64.b64encode(pdf_b).decode()
@@ -560,7 +534,12 @@ with tabs[0]:
     display_info(r"""
     **Executive Summary:**
     * **Unit P&L:** Compares actual efficiency vs target. Green = Profit, Red = Loss.
+    * **Ash Pond Days:** Shows remaining life based on current capacity and daily filling rate.
     * **MTD Profit:** Calculated strictly as `Sum(History[1st -> Yesterday]) + Live_Today`.
+    
+    **Key Formulas:**
+    * $$Profit = (Target_{HR} - Actual_{HR}) \times Generation \times 1000$$
+    * $$Pond\_Days = \frac{Current\_Capacity}{Daily\_Ash\_Gen - Daily\_Ash\_Util}$$
     """)
     st.markdown('<div class="section-header">📅 Daily Snapshot</div>', unsafe_allow_html=True)
     cols = st.columns(4)
@@ -570,32 +549,33 @@ with tabs[0]:
             border = "border-good" if u['profit'] > 0 else "border-bad"
             if u['status'] == "SHUTDOWN":
                 border = "border-shut"
-                color = "#94a3b8"
+                color = "#ffffff"
             with cols[i]:
                 st.markdown(f"""
                 <div class="glass-card {border}">
                     <div class="unit-header">UNIT {u['id']}</div>
                     <div class="big-val" style="color:{color}">{format_lacs(u['profit'])}</div>
-                    <div class="sub-lbl">{u['status'] if u['status']=='SHUTDOWN' else 'Daily Net Impact'}</div>
+                    <div class="sub-lbl" style="color:#ffffff;">{u['status'] if u['status']=='SHUTDOWN' else 'Daily Net Impact'}</div>
                     <hr style="border-color:#ffffff33;">
-                    <div style="text-align:left; font-size:12px; color:#e2e8f0;">
+                    <div style="text-align:left; font-size:12px; color:#ffffff; font-weight:600;">
                         <div style="display:flex; justify-content:space-between;"><span>Target:</span><b>{u['target_hr']:.0f}</b></div>
                         <div style="display:flex; justify-content:space-between;"><span>Actual:</span><b>{u['hr']:.0f}</b></div>
                         <div style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
-                            SOx: <span style="color:{'#f87171' if u['sox']>plant_conf['limits']['sox'] else '#fff'}">{u['sox']}</span> | NOx: {u['nox']}
+                            SOx: <span style="color:{'#f87171' if u['sox']>plant_conf['limits']['sox'] else '#ffffff'}">{u['sox']}</span> | NOx: {u['nox']}
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
     
     with cols[3]:
+        clr = "#f87171" if lagoon_fill_pct > 80 else "#38bdf8"
         st.markdown(f"""
-        <div class="glass-card" style="border-top: 4px solid {'#f87171' if lagoon_fill_pct>80 else '#38bdf8'}">
-            <div class="unit-header" style="color:#38bdf8;">ASH LAGOON FILL</div>
-            <div class="big-val" style="color:{'#f87171' if lagoon_fill_pct>80 else '#38bdf8'}">{lagoon_fill_pct:.1f}%</div>
-            <div class="sub-lbl">Overall Capacity Utilized</div>
-            <div style="font-size:11px; color:#cbd5e1; margin-top:5px;">
-            Tracking YTD Net Dumping
+        <div class="glass-card" style="border-top: 4px solid {clr}">
+            <div class="unit-header" style="color:#38bdf8;">ASH LAGOONS</div>
+            <div class="big-val" style="color:{clr}">{lagoon_fill_pct:.1f}%</div>
+            <div class="sub-lbl" style="color:#ffffff;">Overall Fill Level</div>
+            <div style="font-size:11px; color:#ffffff; font-weight:600; margin-top:5px;">
+            Tracking YTD Dumping
             </div>
         </div>""", unsafe_allow_html=True)
 
@@ -603,9 +583,9 @@ with tabs[0]:
     c_m1, c_m2, c_m3 = st.columns(3)
     c_m1.metric("MTD Fleet Profit", format_lacs(mtd_profit))
     c_m2.metric("MTD Ash Utilization", f"{mtd_ash_util_total:,.0f} Tons")
-    c_m3.info("MTD Data aggregates strictly from the 1st of the month to avoid double-counting.")
+    c_m3.info("MTD strictly sums saved history (excluding today) + your live inputs to prevent double counting.")
 
-# TAB 2: SUSTAINABILITY
+# TAB 2: SUSTAINABILITY (TRUE CARBON FOOTPRINT)
 with tabs[1]:
     display_info(r"""
     **Sustainability & Carbon Footprint:**
@@ -624,7 +604,7 @@ with tabs[1]:
             <div class="glass-card border-bad">
                 <div class="unit-header">UNIT {u['id']}</div>
                 <div class="big-val" style="color:#f87171">{u_co2:,.0f} T</div>
-                <div class="sub-lbl">CO₂ Emitted Today</div>
+                <div class="sub-lbl" style="color:#ffffff;">CO₂ Emitted Today</div>
             </div>""", unsafe_allow_html=True)
             
     st.markdown("#### 🌍 Fleet Combined Effect vs Tree Offset")
@@ -677,54 +657,61 @@ with tabs[1]:
 # TAB 3: ASH OPS (VISUAL REDESIGN)
 with tabs[2]:
     st.markdown("### 🪨 Ash Operations Center")
-    display_info("Daily & MTD Ash Management: Generation vs Utilization, Lagoon Status, and Utilization Breakdown.")
+    display_info(r"""
+    **Ash Management:**
+    * **Generation:** Calculated based on Coal Consumption & Ash %.
+    * **Burj Khalifa Index:** Evaluates how much of the Burj Khalifa could be built if all ash was converted to bricks (165 Million bricks total). Plotted for Daily, MTD, and YTD.
+    * **Lagoon Status:** Real-time tracking of Fill % based on ongoing Un-Utilized Ash dumping.
+    """)
     
-    # Brighter Cards for MTD Metrics
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header" style="color:#fde047; font-size:16px;">MTD ASH GENERATED</div><div class="big-val" style="color:#fde047;">{mtd_ash_gen_total:,.0f} T</div></div>""", unsafe_allow_html=True)
-    with c2:
-        util_pct = (mtd_ash_util_total / mtd_ash_gen_total * 100) if mtd_ash_gen_total > 0 else 0
-        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header" style="color:#6ee7b7; font-size:16px;">MTD ASH UTILIZED</div><div class="big-val" style="color:#6ee7b7;">{mtd_ash_util_total:,.0f} T</div><div class="sub-lbl" style="color:#a7f3d0;">{util_pct:.1f}%</div></div>""", unsafe_allow_html=True)
-    with c3:
-        dump_color = "#f87171" if mtd_dump > 0 else "#38bdf8"
-        st.markdown(f"""<div class="glass-card" style="border-top: 4px solid {dump_color}"><div class="unit-header" style="color:{dump_color}; font-size:16px;">MTD UN-UTILIZED DUMP</div><div class="big-val" style="color:{dump_color};">{max(0, mtd_dump):,.0f} T</div></div>""", unsafe_allow_html=True)
+    with c1: st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header" style="color:#fde047;">MTD ASH GENERATED</div><div class="big-val" style="color:#fde047;">{mtd_ash_gen_total:,.0f} T</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown(f"""<div class="glass-card border-green"><div class="unit-header" style="color:#4ade80;">MTD ASH UTILIZED</div><div class="big-val" style="color:#4ade80;">{mtd_ash_util_total:,.0f} T</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="glass-card border-bad"><div class="unit-header" style="color:#f87171;">MTD UN-UTILIZED DUMP</div><div class="big-val" style="color:#f87171;">{max(0, mtd_dump):,.0f} T</div></div>""", unsafe_allow_html=True)
     
     st.divider()
     
-    # Real-Time Flow & Lagoon Impact
-    st.markdown("#### ⏱️ Real-Time Daily Flow & Dynamic Lagoon Impact")
+    st.markdown("#### ⏱️ Real-Time Daily Flow & Lagoon Dials")
     g1, g2, g3, g4 = st.columns(4)
     max_scale = max(5000, fleet_ash_gen * 1.2)
     with g1:
-        fig_g1 = go.Figure(go.Indicator(mode="gauge+number", value=fleet_ash_gen, title={'text':"Daily Gen (T)", 'font':{'color':'#fde047'}}, gauge={'axis':{'range':[0, max_scale]}, 'bar':{'color':"#fbbf24"}}))
-        fig_g1.update_layout(height=200, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        fig_g1 = go.Figure(go.Indicator(mode="gauge+number", value=fleet_ash_gen, title={'text':"Daily Gen (T)", 'font':{'color':'#fde047'}}, number={'font':{'color':'white'}}, gauge={'axis':{'range':[0, max_scale], 'tickfont':{'color':'white'}}, 'bar':{'color':"#fde047"}}))
+        fig_g1.update_layout(height=220, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_g1, use_container_width=True)
     with g2:
-        fig_g2 = go.Figure(go.Indicator(mode="gauge+number", value=fleet_ash_util, title={'text':"Daily Util (T)", 'font':{'color':'#6ee7b7'}}, gauge={'axis':{'range':[0, max_scale]}, 'bar':{'color':"#10b981"}}))
-        fig_g2.update_layout(height=200, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        fig_g2 = go.Figure(go.Indicator(mode="gauge+number", value=fleet_ash_util, title={'text':"Daily Util (T)", 'font':{'color':'#4ade80'}}, number={'font':{'color':'white'}}, gauge={'axis':{'range':[0, max_scale], 'tickfont':{'color':'white'}}, 'bar':{'color':"#4ade80"}}))
+        fig_g2.update_layout(height=220, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_g2, use_container_width=True)
     with g3:
-        fig_l1 = go.Figure(go.Indicator(mode="gauge+number", value=lagoon_fill_pct, title={'text':"Lagoon 1 (95 Ac)", 'font':{'color':'#38bdf8'}}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#f87171" if lagoon_fill_pct>80 else "#38bdf8"}}))
-        fig_l1.update_layout(height=200, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        fig_l1 = go.Figure(go.Indicator(mode="gauge+number", value=lagoon_fill_pct, title={'text':"Lagoon 1 Fill %", 'font':{'color':'#38bdf8'}}, number={'suffix':"%", 'font':{'color':'white'}}, gauge={'axis':{'range':[0,100], 'tickfont':{'color':'white'}}, 'bar':{'color':"#f87171" if lagoon_fill_pct>80 else "#38bdf8"}}))
+        fig_l1.update_layout(height=220, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_l1, use_container_width=True)
     with g4:
-        fig_l2 = go.Figure(go.Indicator(mode="gauge+number", value=lagoon_fill_pct, title={'text':"Lagoon 2 (90 Ac)", 'font':{'color':'#38bdf8'}}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#f87171" if lagoon_fill_pct>80 else "#38bdf8"}}))
-        fig_l2.update_layout(height=200, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        fig_l2 = go.Figure(go.Indicator(mode="gauge+number", value=lagoon_fill_pct, title={'text':"Lagoon 2 Fill %", 'font':{'color':'#38bdf8'}}, number={'suffix':"%", 'font':{'color':'white'}}, gauge={'axis':{'range':[0,100], 'tickfont':{'color':'white'}}, 'bar':{'color':"#f87171" if lagoon_fill_pct>80 else "#38bdf8"}}))
+        fig_l2.update_layout(height=220, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_l2, use_container_width=True)
         
     st.divider()
         
     c_vis1, c_vis2 = st.columns([1, 1])
     with c_vis1:
-        st.markdown("#### 🏗️ Volume vs Burj Khalifa")
-        burj_vol_equiv = 500000 
-        pct_mtd = (mtd_ash_gen_total / burj_vol_equiv) * 100
-        pct_ytd = (ytd_ash_gen_total / burj_vol_equiv) * 100
+        st.markdown("#### 🏗️ Volume vs Burj Khalifa (165M Bricks)")
+        burj_total_bricks = 165_000_000 
         
-        fig_burj = go.Figure()
-        fig_burj.add_trace(go.Bar(x=['Burj Khalifa', 'MTD Ash', 'YTD Ash'], y=[100, pct_mtd, pct_ytd], marker_color=['#94a3b8', '#fbbf24', '#f87171']))
-        fig_burj.update_layout(title="Ash Volume Equivalency (%)", height=300, paper_bgcolor='rgba(0,0,0,0)', font_color='white', showlegend=False)
+        # Calculate % Built if all Ash was converted to Bricks (666 bricks per Ton)
+        daily_burj_pct = (fleet_ash_gen * 666 / burj_total_bricks) * 100
+        mtd_burj_pct = (mtd_ash_gen_total * 666 / burj_total_bricks) * 100
+        ytd_burj_pct = (ytd_ash_gen_total * 666 / burj_total_bricks) * 100
+        
+        df_burj = pd.DataFrame({
+            'Timeline': ['Daily Gen', 'MTD Gen', 'YTD Gen'],
+            '% Built': [daily_burj_pct, mtd_burj_pct, ytd_burj_pct]
+        })
+        
+        fig_burj = px.bar(df_burj, x='Timeline', y='% Built', text='% Built', title="Percentage of Burj Khalifa Built", color='Timeline', color_discrete_sequence=['#34d399', '#fcd34d', '#f87171'], template='plotly_dark')
+        fig_burj.update_traces(texttemplate='%{text:.2f}%', textposition='outside', textfont=dict(color='white'))
+        fig_burj.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', showlegend=False)
+        fig_burj.update_yaxes(title="%", showgrid=False)
         st.plotly_chart(fig_burj, use_container_width=True)
 
     with c_vis2:
@@ -732,7 +719,7 @@ with tabs[2]:
             st.markdown("#### 📉 Today's Disposal Breakdown")
             ash_breakdown = pd.DataFrame({'Type': ['Cement', 'Bricks'], 'Tons': [sum(u['ash']['cem_util'] for u in units_data), sum(u['ash']['brick_util'] for u in units_data)]})
             fig_pie = px.pie(ash_breakdown, values='Tons', names='Type', hole=0.4, template='plotly_dark', color_discrete_sequence=['#fbbf24', '#38bdf8'])
-            fig_pie.update_layout(height=300, margin=dict(t=30, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+            fig_pie.update_layout(height=350, margin=dict(t=30, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', font_color='white')
             st.plotly_chart(fig_pie, use_container_width=True)
 
 # TAB 4: RENEWABLES
@@ -748,9 +735,9 @@ with tabs[3]:
     st.markdown("#### ⚡ Green Power Impact")
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#10b981">{bio_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{bio_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card border-green"><div class="unit-header">BIOMASS</div><div class="big-val" style="color:#10b981">{bio_co2:.2f} T</div><div class="sub-lbl" style="color:#ffffff;">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#ffffff;">{bio_homes:,.0f}</div><div class="sub-lbl" style="color:#ffffff;">Homes Powered</div></div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#fde047">{sol_co2:.2f} T</div><div class="sub-lbl">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#fff">{solar_homes:,.0f}</div><div class="sub-lbl">Homes Powered</div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="glass-card border-solar"><div class="unit-header">SOLAR</div><div class="big-val" style="color:#fde047">{sol_co2:.2f} T</div><div class="sub-lbl" style="color:#ffffff;">CO2 Saved Today</div><hr style="border-color:#ffffff33;"><div class="big-val" style="font-size:24px; color:#ffffff;">{solar_homes:,.0f}</div><div class="sub-lbl" style="color:#ffffff;">Homes Powered</div></div>""", unsafe_allow_html=True)
     if anim_sun: st_lottie(anim_sun, height=150, key="sun_anim")
 
 # TABS 5-7: UNITS
@@ -766,8 +753,7 @@ if units_data:
             * Vacuum: 15 kcal/kWh per 0.01 deviation.
             * MS Temp: 0.7 kcal/kWh per degree deviation.
             """)
-            u = units_data[i]
-            render_unit_detail(u, configs)
+            render_unit_detail(units_data[i], configs)
 
 # TAB 8: TRENDS
 with tabs[7]:
@@ -788,9 +774,10 @@ with tabs[7]:
             fig.add_trace(go.Scatter(x=u_df['Date_dt'], y=u_df['HR'], name=f"Unit {u_id} HR", mode='lines+markers', line=dict(color=colors.get(u_id, 'white'))), secondary_y=False)
         fleet_trend = filtered_df.groupby('Date_dt')['Profit'].sum().reset_index()
         fig.add_trace(go.Bar(x=fleet_trend['Date_dt'], y=fleet_trend['Profit'], name="Fleet Profit", opacity=0.3, marker_color='white'), secondary_y=True)
-        fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", legend=dict(orientation="h", y=1.1))
-        fig.update_yaxes(title_text="Heat Rate", secondary_y=False, showgrid=False)
-        fig.update_yaxes(title_text="Profit", secondary_y=True, showgrid=False)
+        fig.update_layout(title="Heat Rate vs Profit", template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", legend=dict(orientation="h", y=1.1), font_color='white')
+        fig.update_yaxes(title_text="Heat Rate", secondary_y=False, showgrid=False, tickfont=dict(color='white'))
+        fig.update_yaxes(title_text="Profit", secondary_y=True, showgrid=False, tickfont=dict(color='white'))
+        fig.update_xaxes(tickfont=dict(color='white'))
         st.plotly_chart(fig, use_container_width=True)
     else: st.info("No history data available.")
 
@@ -828,7 +815,7 @@ with tabs[8]:
     with r2: st.metric("Daily Profit Impact", format_lacs(total_sim_impact))
     with r3: st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
 
-# TAB 10: ANALYTICS
+# TAB 10: ANALYTICS 
 with tabs[9]:
     st.markdown("### 📊 Interactive Analytics Playground")
     gb_raw = analytics_state.get('greenbelt_raw', [])
