@@ -1751,7 +1751,7 @@ def main():
                 )
                 st.plotly_chart(fig_surv, use_container_width=True)
             
-            st.markdown("#### 🌡️ Plantation Heatmap")
+        st.markdown("#### 🌡️ Plantation Heatmap")
         hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
         
         # Calculate dynamic height so 50+ species don't get squished
