@@ -1752,27 +1752,38 @@ def main():
                 st.plotly_chart(fig_surv, use_container_width=True)
             
             st.markdown("#### 🌡️ Plantation Heatmap")
+        hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
+        
+        # Calculate dynamic height so 50+ species don't get squished
+        unique_species_count = len(df_gb['Species'].unique())
+        dynamic_height = max(400, unique_species_count * 20)
 
-            hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
-
-            if hm_view == "Species vs Year":
-                fig_heat = px.density_heatmap(
-                    df_gb, x='Year', y='Species', z='Planted',
-                    color_continuous_scale='Greens_r'  # Notice the 's' here
-                )
-            else:
-                fig_heat = px.density_heatmap(
-                    df_gb, x='Species', y='Year', z='Planted',
-                    color_continuous_scale='Greens_r'  # Notice the 's' here
-                )
-
-            # Here is where the black background goes!
-            fig_heat.update_layout(
-                paper_bgcolor='black',  # Outer background
-                plot_bgcolor='black',   # Inner chart background
-                font_color='white'
+        if hm_view == "Species vs Year":
+            fig_heat = px.density_heatmap(
+                df_gb, x='Year', y='Species', z='Planted', 
+                color_continuous_scale='Greens_r',
+                template='plotly_dark'
             )
-            st.plotly_chart(fig_heat, use_container_width=True)
+            fig_heat.update_layout(height=dynamic_height) # Taller chart for Y-axis species
+        else:
+            fig_heat = px.density_heatmap(
+                df_gb, x='Species', y='Year', z='Planted', 
+                color_continuous_scale='Greens_r',
+                template='plotly_dark'
+            )
+            fig_heat.update_layout(height=500)
+            fig_heat.update_xaxes(tickangle=-45) # Rotate X-axis text so it doesn't overlap
+
+        # Make it blend seamlessly and hide ugly grid lines
+        fig_heat.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', 
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color='#cbd5e1',
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=False, zeroline=False)
+        )
+        
+        st.plotly_chart(fig_heat, use_container_width=True)
         else:
             st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
         
