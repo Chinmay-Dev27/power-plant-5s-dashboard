@@ -330,7 +330,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     carbon_tons = (coal_saved_kg / 1000) * 1.7
     
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
-    
+
+    actual_vac = inputs['vac']/100
     l_vac = max(0, (inputs['vac'] - (-0.92)) / 0.01 * 18) * -1
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
