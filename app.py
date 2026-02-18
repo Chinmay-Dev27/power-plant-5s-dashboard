@@ -300,27 +300,56 @@ def save_analytics_state(repo, data, sha):
         return False
 
 # ==================== CALCULATION ENGINE ====================
+
 def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
-    """Enhanced unit calculation"""
-    TARGET_HR = design_vals['target_hr']
-    DESIGN_HR = 2250
-    COAL_GCV = design_vals['gcv']
+    TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 and gen > 0 else 0
-    co2_emitted = coal_consumed * 1.7
+    co2_emitted = coal_consumed * 1.7 
     
     if gen <= 0 or hr <= 0:
-        return {
-            "id": u_id, "gen": gen, "hr": hr,
-            "profit": -1 * (350 * 1000 * 24 * 3),
-            "escerts": 0, "carbon": 0, "co2_emitted": 0, "score": 0,
-            "sox": inputs['sox'], "nox": inputs['nox'],
-            "losses": {"Vacuum": 0, "MS Temp": 0, "Flue Gas": 0, "Spray": 0, "Unaccounted": 0},
-            "ash": {"generated": 0, "utilized": 0, "stocked": 0, "bricks_made": 0,
-                    "cem_util": 0, "brick_util": 0, "burj_pct": 0},
-            "limits": design_vals['limits'], "trees": 0, "target_hr": TARGET_HR,
-            "homes_bio": 0, "inputs": inputs, "status": "SHUTDOWN"
-        }
+        profit = -1 * (350 * 1000 * 24 * 3) 
+        score = 0
+        l_vac = l_ms = l_fg = l_spray = l_unacc = 0
+        carbon_tons = escerts = 0
+        status = "SHUTDOWN"
+    else:
+        status = "RUNNING"
+        kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
+        escerts = kcal_diff / 10_000_000
+        coal_saved_kg = kcal_diff / COAL_GCV
+        carbon_tons = (coal_saved_kg / 1000) * 1.7
+        profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
+        
+        # --- SMART VACUUM AUTOSCALE ---
+        actual_vac = inputs['vac'] / 100 if inputs['vac'] <= -1.0 else inputs['vac']
+        l_vac = max(0, (actual_vac - (-0.92)) / 0.01 * 18) * -1
+        
+        l_ms = max(0, (540 - inputs['ms']) * 1.2)
+        l_fg = max(0, (inputs['fg'] - 130) * 1.5)
+        l_spray = max(0, (inputs['spray'] - 15) * 2.0)
+        l_unacc = max(0, hr - (DESIGN_HR + l_ms + l_fg + l_spray + 50) - abs(l_vac))
+        score = max(0, 100 - (abs(l_vac) + l_ms + l_fg + l_spray + l_unacc)/3)
+    
+    ash_gen = coal_consumed * (ash_params['ash_pct'] / 100)
+    ash_util = ash_params['util_cem'] + ash_params['util_brick']
+    ash_stocked = ash_gen - ash_util
+    bricks_current = ash_params['util_brick'] * 666
+    burj_pct = (bricks_current / 165_000_000) * 100
+    homes_bio = ash_params.get('biomass', 0) * 1000 * 1.2 / 4 
+    
+    return {
+        "id": u_id, "gen": gen, "hr": hr, "profit": profit, "escerts": escerts if status=="RUNNING" else 0, "carbon": carbon_tons if status=="RUNNING" else 0,
+        "co2_emitted": co2_emitted,
+        "score": score, "sox": inputs['sox'], "nox": inputs['nox'],
+        "losses": {"Vacuum": abs(l_vac), "MS Temp": l_ms, "Flue Gas": l_fg, "Spray": l_spray, "Unaccounted": l_unacc},
+        "ash": {"generated": ash_gen, "utilized": ash_util, "stocked": ash_stocked, 
+                "bricks_made": bricks_current, "cem_util": ash_params['util_cem'],
+                "brick_util": ash_params['util_brick'], "burj_pct": burj_pct},
+        "limits": design_vals['limits'], "trees": abs((carbon_tons if status=="RUNNING" else 0) / 0.025),
+        "target_hr": TARGET_HR, "homes_bio": homes_bio,
+        "inputs": inputs, "status": status
+    }
     
     status = "RUNNING"
     
@@ -332,8 +361,8 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
 
     # --- SMART VACUUM AUTOSCALE ---
-        actual_vac = inputs['vac'] / 100 if inputs['vac'] <= -1.0 else inputs['vac']
-        l_vac = max(0, (actual_vac - (-0.92)) / 0.01 * 18)
+    actual_vac = inputs['vac'] / 100 if inputs['vac'] <= -1.0 else inputs['vac']
+    l_vac = max(0, (actual_vac - (-0.92)) / 0.01 * 18)
 
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
