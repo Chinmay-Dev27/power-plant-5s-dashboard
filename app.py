@@ -704,7 +704,23 @@ def render_unit_detail(u, configs):
             </div>
         </div>
         """, unsafe_allow_html=True)
-
+# --- ADD THIS NEW BLOCK HERE ---
+    st.markdown("#### 📐 Thermodynamic Loss Formulas")
+    lf1, lf2, lf3, lf4, lf5 = st.columns(5)
+    
+    f_style = "background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; font-size: 13px; color: #cbd5e1; text-align: center; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
+    
+    with lf1: 
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">Vacuum Loss</b><br>18 kcal/kWh penalty per 0.01 deviation above -0.92</div>', unsafe_allow_html=True)
+    with lf2: 
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">MS Temp Loss</b><br>1.2 kcal/kWh penalty per 1°C deviation below 540°C</div>', unsafe_allow_html=True)
+    with lf3: 
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">FG Temp Loss</b><br>1.5 kcal/kWh penalty per 1°C deviation above 130°C</div>', unsafe_allow_html=True)
+    with lf4: 
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">Spray Loss</b><br>2.0 kcal/kWh penalty per 1 TPH deviation above 15 TPH</div>', unsafe_allow_html=True)
+    with lf5: 
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">Unaccounted Loss</b><br>Actual HR - (Design Base 2250 + Calculated Losses)</div>', unsafe_allow_html=True)
+    # -------------------------------
 # ==================== PDF & EXCEL ====================
 class PDF(FPDF):
     def header(self):
