@@ -1768,7 +1768,7 @@ def main():
             else:
                 fig_heat = px.density_heatmap(
                     df_gb, x='Species', y='Year', z='Planted', 
-                    color_continuous_scale='Red',
+                    color_continuous_scale='Reds',
                     template='plotly_dark'
                 )
                 fig_heat.update_layout(height=500)
