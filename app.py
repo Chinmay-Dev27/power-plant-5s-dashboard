@@ -1768,7 +1768,7 @@ def main():
             
             fig_heat.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white'
+                font_color='Black'
             )
             st.plotly_chart(fig_heat, use_container_width=True)
         else:
