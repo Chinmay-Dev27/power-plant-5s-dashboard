@@ -1290,65 +1290,34 @@ def main():
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
                 st.markdown(f"{medal} Unit {u['id']}: {u['hr']:.0f} kcal/kWh")
     
-    # TAB 4: SUSTAINABILITY (TRUE CARBON FOOTPRINT WITH 1.395 LOGIC)
-with tabs[1]:
-    display_info(r"""
-    **Sustainability & Carbon Footprint:**
-    * **Daily CO₂ Emissions:** Calculated as `Coal Consumed (Tons) × 1.395` (Assuming 38% Carbon).
-    * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`.
-    * **Area Required:** Assumes approx 1000 trees per acre for new plantations to offset the deficit.
-    """)
-    
-    st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
-    cols = st.columns(3)
-    total_daily_co2 = 0
-    for i, u in enumerate(units_data):
-        u_co2 = u.get('co2_emitted', 0)
-        total_daily_co2 += u_co2
-        with cols[i]:
-            st.markdown(f"""
-            <div class="glass-card border-bad">
-                <div class="unit-header">UNIT {u['id']}</div>
-                <div class="big-val" style="color:#f87171">{u_co2:,.0f} T</div>
-                <div class="sub-lbl" style="color:#ffffff;">CO₂ Emitted Today</div>
-            </div>""", unsafe_allow_html=True)
-
-    # --- NEW SCIENTIFIC LOGIC & DAILY OFFSET REQUIREMENT CARDS ---
-    st.markdown("#### 🧪 Scientific Logic & 100% Offset Goal")
-    c_logic1, c_logic2 = st.columns(2)
-    with c_logic1:
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #38bdf8; padding: 15px;">
-            <div class="unit-header" style="color:#38bdf8;">CO₂ EMISSION FACTOR</div>
-            <div style="font-size:14px; text-align:left; color:#e2e8f0; margin-top:10px; line-height: 1.6;">
-                <b>Carbon Content in Coal:</b> 38%<br>
-                <b>Chemical Conversion:</b> Coal × 0.38 × 3.67<br>
-                <b>Result:</b> 1 Ton Coal → 1.3946 Ton CO₂<br>
-                <div style="background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-top:5px; text-align:center;">
-                    <span style="color:#fcd34d; font-weight:bold; font-size:16px;">CO₂ per day = Coal per day × 1.395</span>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # TAB 4: SUSTAINABILITY - INFO ADDED
+    with tabs[3]:
+        display_info(r"""
+        **Sustainability & Carbon Footprint:**
+        * **Daily CO₂ Emissions:** `Coal Consumed (Tons) × 1.395`
+        * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`
+        * **Area Required:** ~1000 trees per acre for new plantations
+        """)
         
-    with c_logic2:
-        daily_offset_per_tree = 25.0 / 365.0 / 1000.0
-        daily_trees_req = total_daily_co2 / daily_offset_per_tree if daily_offset_per_tree > 0 else 0
-        daily_area_req = daily_trees_req / 1000.0 # Assuming 1000 trees per acre
+        st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
         
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #10b981; padding: 15px;">
-            <div class="unit-header" style="color:#10b981;">DAILY OFFSET REQUIREMENT (100% NEUTRAL)</div>
-            <div class="big-val" style="color:#10b981; font-size: 24px;">{daily_trees_req:,.0f} Trees</div>
-            <div class="sub-lbl" style="color:#ffffff;">To completely offset {total_daily_co2:,.0f} T CO₂/Day</div>
-            <div style="font-size:13px; text-align:left; color:#cbd5e1; margin-top:10px; border-top: 1px solid #444; padding-top: 5px;">
-                <b>Absorption Rate:</b> 25 kg CO₂ / year per tree<br>
-                <b>Land Area Required:</b> <span style="color:#fcd34d; font-weight:bold;">{daily_area_req:,.0f} Acres</span> (at 1000 trees/acre)
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        cols = st.columns(3)
+        total_daily_co2 = 0
+        
+        for i, u in enumerate(units_data):
+            u_co2 = u.get('co2_emitted', 0)
+            total_daily_co2 += u_co2
             
-    st.markdown("#### 🌍 Fleet Combined Effect vs Tree Offset")
+            with cols[i]:
+                st.markdown(f"""
+                <div class="glass-card border-bad">
+                    <div class="unit-header">UNIT {u['id']}</div>
+                    <div class="big-val" style="color:#f87171">{u_co2:,.0f} T</div>
+                    <div class="sub-lbl" style="color:#ffffff;">CO₂ Emitted Today</div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown("#### 🌍 Fleet Combined Effect vs Tree Offset")
         
         gb_raw = analytics_state.get('greenbelt_raw', [])
         
