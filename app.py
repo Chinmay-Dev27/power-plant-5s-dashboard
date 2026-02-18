@@ -1294,9 +1294,9 @@ def main():
     with tabs[3]:
         display_info(r"""
         **Sustainability & Carbon Footprint:**
-        * **Daily CO₂ Emissions:** `Coal Consumed (Tons) × 1.395`
-        * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`
-        * **Area Required:** ~1000 trees per acre for new plantations
+        * **Daily CO₂ Emissions:** Calculated as `Coal Consumed (Tons) × 1.395` (Assuming 38% Carbon).
+        * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`.
+        * **Area Required:** Assumes approx 1000 trees per acre for new plantations to offset the deficit.
         """)
         
         st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
@@ -1316,7 +1316,42 @@ def main():
                     <div class="sub-lbl" style="color:#ffffff;">CO₂ Emitted Today</div>
                 </div>
                 """, unsafe_allow_html=True)
-        
+                
+        # --- NEW SCIENTIFIC LOGIC & DAILY OFFSET REQUIREMENT CARDS ---
+        st.markdown("#### 🧪 Scientific Logic & 100% Offset Goal")
+        c_logic1, c_logic2 = st.columns(2)
+        with c_logic1:
+            st.markdown(f"""
+            <div class="glass-card" style="border-left: 4px solid #38bdf8; padding: 15px;">
+                <div class="unit-header" style="color:#38bdf8;">CO₂ EMISSION FACTOR</div>
+                <div style="font-size:14px; text-align:left; color:#e2e8f0; margin-top:10px; line-height: 1.6;">
+                    <b>Carbon Content in Coal:</b> 38%<br>
+                    <b>Chemical Conversion:</b> Coal × 0.38 × 3.67<br>
+                    <b>Result:</b> 1 Ton Coal → 1.3946 Ton CO₂<br>
+                    <div style="background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-top:5px; text-align:center;">
+                        <span style="color:#fcd34d; font-weight:bold; font-size:16px;">CO₂ per day = Coal per day × 1.395</span>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with c_logic2:
+            daily_offset_per_tree = 25.0 / 365.0 / 1000.0
+            daily_trees_req = total_daily_co2 / daily_offset_per_tree if daily_offset_per_tree > 0 else 0
+            daily_area_req = daily_trees_req / 1000.0 # Assuming 1000 trees per acre
+            
+            st.markdown(f"""
+            <div class="glass-card" style="border-left: 4px solid #10b981; padding: 15px;">
+                <div class="unit-header" style="color:#10b981;">DAILY OFFSET REQUIREMENT (100% NEUTRAL)</div>
+                <div class="big-val" style="color:#10b981; font-size: 24px;">{daily_trees_req:,.0f} Trees</div>
+                <div class="sub-lbl" style="color:#ffffff;">To completely offset {total_daily_co2:,.0f} T CO₂/Day</div>
+                <div style="font-size:13px; text-align:left; color:#cbd5e1; margin-top:10px; border-top: 1px solid #444; padding-top: 5px;">
+                    <b>Absorption Rate:</b> 25 kg CO₂ / year per tree<br>
+                    <b>Land Area Required:</b> <span style="color:#fcd34d; font-weight:bold;">{daily_area_req:,.0f} Acres</span> (at 1000 trees/acre)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+                
         st.markdown("#### 🌍 Fleet Combined Effect vs Tree Offset")
         
         gb_raw = analytics_state.get('greenbelt_raw', [])
@@ -1326,7 +1361,7 @@ def main():
             real_trees = df_gb['Matured'].sum() if 'Matured' in df_gb.columns else 354762
         else:
             real_trees = 354762
-        
+            
         yearly_offset_tons = real_trees * 25.0 / 1000.0
         daily_offset_tons = yearly_offset_tons / 365.0
         net_daily_co2 = total_daily_co2 - daily_offset_tons
@@ -1342,6 +1377,36 @@ def main():
             "Net CO₂ Footprint", f"{net_daily_co2:,.0f} T/Day",
             delta=f"-{daily_offset_tons:.1f} T offset", delta_color="inverse"
         )
+
+        st.divider()
+        st.markdown("#### 📆 MTD Carbon Offset & Remediation Plan")
+        
+        past_co2_emitted = 0
+        if not hist_df.empty:
+            past_mtd_df = hist_df[(hist_df['Date'] >= curr_month_start) & (hist_df['Date'] < date_in_ts)].copy()
+            if not past_mtd_df.empty:
+                past_mtd_df['Coal_Tons'] = (past_mtd_df['Gen'] * past_mtd_df['HR'] * 1000) / 3585
+                past_co2_emitted = (past_mtd_df['Coal_Tons'] * 1.395).sum() # 1.395 multiplier
+        
+        mtd_co2_emitted = past_co2_emitted + total_daily_co2
+        days_mtd = (date_in_ts - curr_month_start).days + 1
+        mtd_offset = daily_offset_tons * days_mtd
+        mtd_deficit = mtd_co2_emitted - mtd_offset
+        
+        if mtd_deficit > 0:
+            offset_per_tree_mtd = (25.0 / 365.0) * days_mtd / 1000.0
+            trees_needed = mtd_deficit / offset_per_tree_mtd if offset_per_tree_mtd > 0 else 0
+            area_needed_acres = trees_needed / 1000.0
+            
+            st.warning(f"⚠️ **Carbon Deficit Alert:** Your trees offset only **{(mtd_offset/mtd_co2_emitted*100) if mtd_co2_emitted>0 else 0:.3f}%** of MTD emissions.")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("MTD CO₂ Emitted", f"{mtd_co2_emitted:,.0f} T")
+            m2.metric("Additional Trees Needed", f"{trees_needed:,.0f}")
+            m3.metric("Land Area Required", f"{area_needed_acres:,.0f} Acres")
+        else:
+            st.success("🌿 **Carbon Neutral!** Your greenbelt has successfully offset all MTD emissions.")
+            st.metric("MTD Net CO₂", f"{mtd_deficit:,.0f} T")
     
     # TAB 5: ASH OPS - INFO ADDED
     with tabs[4]:
