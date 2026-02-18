@@ -1693,7 +1693,7 @@ def main():
             with col_gb2:
                 all_species = sorted(df_gb['Species'].unique())
                 half_index = len(all_species) // 2
-                sel_species = st.multiselect("🌿 Filter Species", all_species, default=all_species[:5])
+                sel_species = st.multiselect("🌿 Filter Species", all_species, default=all_species[:half_index])
             
             df_yr = df_gb[df_gb['Year'] == sel_year]
             if sel_species:
