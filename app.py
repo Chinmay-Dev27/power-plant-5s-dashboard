@@ -1555,7 +1555,11 @@ def main():
             filtered_df = filtered_df[filtered_df['HR'] > 100]
             filtered_df['Date_dt'] = filtered_df['Date'].dt.date
             filtered_df['Unit'] = filtered_df['Unit'].astype(str)
-            
+            # --- NEW UNIT FILTER ---
+            all_units = sorted(filtered_df['Unit'].unique())
+            selected_units = st.multiselect("Select Units", all_units, default=all_units)
+            filtered_df = filtered_df[filtered_df['Unit'].isin(selected_units)]
+            # -----------------------
             fig = make_subplots(specs=[[{"secondary_y": True}]])
             
             colors = {'1': '#38bdf8', '2': '#fbbf24', '3': '#10b981'}
