@@ -1565,6 +1565,9 @@ def main():
                 <div class="big-val" style="color:#10b981">{bio_co2:.2f} T</div>
                 <div class="sub-lbl" style="color:#ffffff;">CO2 Saved Today</div>
                 <hr style="border-color:#ffffff33;">
+                <div class="big-val" style="font-size:24px; color:#ffffff;">{total_bio:,.0f} T</div>
+                <div class="sub-lbl" style="color:#ffffff;">Biomass Fired Today</div>
+                <hr style="border-color:#ffffff33;">
                 <div class="big-val" style="font-size:24px; color:#ffffff;">{bio_homes:,.0f}</div>
                 <div class="sub-lbl" style="color:#ffffff;">Homes Powered</div>
             </div>
@@ -1576,6 +1579,9 @@ def main():
                 <div class="unit-header">SOLAR</div>
                 <div class="big-val" style="color:#fde047">{sol_co2:.2f} T</div>
                 <div class="sub-lbl" style="color:#ffffff;">CO2 Saved Today</div>
+                <hr style="border-color:#ffffff33;">
+                <div class="big-val" style="font-size:24px; color:#ffffff;">{sol_u1 * 1000000:,.0f} kWh</div>
+                <div class="sub-lbl" style="color:#ffffff;">Solar Generated Today</div>
                 <hr style="border-color:#ffffff33;">
                 <div class="big-val" style="font-size:24px; color:#ffffff;">{solar_homes:,.0f}</div>
                 <div class="sub-lbl" style="color:#ffffff;">Homes Powered</div>
