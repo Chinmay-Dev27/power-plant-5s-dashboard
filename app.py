@@ -1768,7 +1768,7 @@ def main():
             else:
                 fig_heat = px.density_heatmap(
                     df_gb, x='Species', y='Year', z='Planted', 
-                    color_continuous_scale='Greens',
+                    color_continuous_scale='Red',
                     template='plotly_dark'
                 )
                 fig_heat.update_layout(height=500)
@@ -1776,8 +1776,8 @@ def main():
 
             # Make it blend seamlessly and hide ugly grid lines
             fig_heat.update_layout(
-                paper_bgcolor='rgba(0,0,1,0)', 
-                plot_bgcolor='rgba(0,0,1,0)',
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
                 font_color='#cbd5e1',
                 xaxis=dict(showgrid=False, zeroline=False),
                 yaxis=dict(showgrid=False, zeroline=False)
