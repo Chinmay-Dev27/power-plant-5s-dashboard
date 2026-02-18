@@ -1758,17 +1758,17 @@ def main():
             if hm_view == "Species vs Year":
                 fig_heat = px.density_heatmap(
                     df_gb, x='Year', y='Species', z='Planted',
-                    color_continuous_scale='Greens'
+                    color_continuous_scale='Green'
                 )
             else:
                 fig_heat = px.density_heatmap(
                     df_gb, x='Species', y='Year', z='Planted',
-                    color_continuous_scale='Greens'
+                    color_continuous_scale='Green'
                 )
             
             fig_heat.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white'
+                paper_bgcolor='black',
+                font_color='black'
             )
             st.plotly_chart(fig_heat, use_container_width=True)
         else:
