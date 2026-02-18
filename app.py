@@ -1669,7 +1669,7 @@ def main():
         with r3:
             st.metric("APC Cost Impact", format_lacs(sim_apc_loss))
     
-    # TAB 12: ANALYTICS - FULLY RESTORED WITH PIE CHARTS!
+# TAB 12: ANALYTICS - FULLY RESTORED WITH PIE CHARTS!
     with tabs[11]:
         display_info("Interactive analytics with greenbelt plantation and ash utilization visualizations.")
         
@@ -1751,30 +1751,30 @@ def main():
                 )
                 st.plotly_chart(fig_surv, use_container_width=True)
             
-        st.markdown("#### 🌡️ Plantation Heatmap")
-        hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
-        
-        # Calculate dynamic height so 50+ species don't get squished
-        unique_species_count = len(df_gb['Species'].unique())
-        dynamic_height = max(400, unique_species_count * 20)
+            st.markdown("#### 🌡️ Plantation Heatmap")
+            hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
+            
+            # Calculate dynamic height so 50+ species don't get squished
+            unique_species_count = len(df_gb['Species'].unique())
+            dynamic_height = max(400, unique_species_count * 20)
 
-        if hm_view == "Species vs Year":
-            fig_heat = px.density_heatmap(
-                df_gb, x='Year', y='Species', z='Planted', 
-                color_continuous_scale='Greens_r',
-                template='plotly_dark'
-            )
-            fig_heat.update_layout(height=dynamic_height) # Taller chart for Y-axis species
-        else:
-            fig_heat = px.density_heatmap(
-                df_gb, x='Species', y='Year', z='Planted', 
-                color_continuous_scale='Greens_r',
-                template='plotly_dark'
-            )
-            fig_heat.update_layout(height=500)
-            fig_heat.update_xaxes(tickangle=-45) # Rotate X-axis text so it doesn't overlap
+            if hm_view == "Species vs Year":
+                fig_heat = px.density_heatmap(
+                    df_gb, x='Year', y='Species', z='Planted', 
+                    color_continuous_scale='Greens_r',
+                    template='plotly_dark'
+                )
+                fig_heat.update_layout(height=dynamic_height) # Taller chart for Y-axis species
+            else:
+                fig_heat = px.density_heatmap(
+                    df_gb, x='Species', y='Year', z='Planted', 
+                    color_continuous_scale='Greens_r',
+                    template='plotly_dark'
+                )
+                fig_heat.update_layout(height=500)
+                fig_heat.update_xaxes(tickangle=-45) # Rotate X-axis text so it doesn't overlap
 
-        # Make it blend seamlessly and hide ugly grid lines
+            # Make it blend seamlessly and hide ugly grid lines
             fig_heat.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)', 
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -1783,10 +1783,8 @@ def main():
                 yaxis=dict(showgrid=False, zeroline=False)
             )
             
-            # NOTE: This line is indented to stay INSIDE the 'if gb_raw:' block
             st.plotly_chart(fig_heat, use_container_width=True)
             
-        # NOTE: This 'else' aligns perfectly with 'if gb_raw:' above it
         else:
             st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
         
