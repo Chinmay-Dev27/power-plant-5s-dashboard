@@ -1775,15 +1775,18 @@ def main():
             fig_heat.update_xaxes(tickangle=-45) # Rotate X-axis text so it doesn't overlap
 
         # Make it blend seamlessly and hide ugly grid lines
-        fig_heat.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', 
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#cbd5e1',
-            xaxis=dict(showgrid=False, zeroline=False),
-            yaxis=dict(showgrid=False, zeroline=False)
-        )
-        
-        st.plotly_chart(fig_heat, use_container_width=True)
+            fig_heat.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='#cbd5e1',
+                xaxis=dict(showgrid=False, zeroline=False),
+                yaxis=dict(showgrid=False, zeroline=False)
+            )
+            
+            # NOTE: This line is indented to stay INSIDE the 'if gb_raw:' block
+            st.plotly_chart(fig_heat, use_container_width=True)
+            
+        # NOTE: This 'else' aligns perfectly with 'if gb_raw:' above it
         else:
             st.info("Greenbelt data missing in 'analytics_state_v1.json'.")
         
