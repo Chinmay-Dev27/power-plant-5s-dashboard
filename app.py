@@ -305,7 +305,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     TARGET_HR = design_vals['target_hr']; DESIGN_HR = 2250; COAL_GCV = design_vals['gcv']
     
     coal_consumed = (gen * hr * 1000) / COAL_GCV if COAL_GCV > 0 and gen > 0 else 0
-    co2_emitted = coal_consumed * 1.7 
+    co2_emitted = coal_consumed * 1.395 # Updated to 38% Carbon formula 
     
     if gen <= 0 or hr <= 0:
         profit = -1 * (350 * 1000 * 24 * 3) 
@@ -318,7 +318,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
         escerts = kcal_diff / 10_000_000
         coal_saved_kg = kcal_diff / COAL_GCV
-        carbon_tons = (coal_saved_kg / 1000) * 1.7
+        carbon_tons = (coal_saved_kg / 1000) * 1.395 # Updated to 38% Carbon formula
         profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
         
         # --- SMART VACUUM AUTOSCALE ---
@@ -356,7 +356,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
     kcal_diff = (TARGET_HR - hr) * gen * 1_000_000
     escerts = kcal_diff / 10_000_000
     coal_saved_kg = kcal_diff / COAL_GCV
-    carbon_tons = (coal_saved_kg / 1000) * 1.7
+    carbon_tons = (coal_saved_kg / 1000) * 1.395 # Updated to 38% Carbon formula
     
     profit = (escerts * 1000) + (carbon_tons * 500) + (coal_saved_kg * 4.5)
 
@@ -1072,7 +1072,7 @@ def main():
     )
     
     total_bio = bio_u1 + bio_u2 + bio_u3
-    bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.7
+    bio_co2 = (total_bio * bio_gcv * 1000 / 3600) * 1.395 # Updated to 38% Carbon formula
     sol_co2 = sol_u1 * 1000 * 0.95
     solar_homes = (sol_u1 * 1000000) / 4
     bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
@@ -1294,7 +1294,7 @@ def main():
     with tabs[3]:
         display_info(r"""
         **Sustainability & Carbon Footprint:**
-        * **Daily CO₂ Emissions:** `Coal Consumed (Tons) × 1.7`
+        * **Daily CO₂ Emissions:** `Coal Consumed (Tons) × 1.395`
         * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`
         * **Area Required:** ~1000 trees per acre for new plantations
         """)
@@ -1920,7 +1920,7 @@ def main():
         st.latex(r"Remaining\_Days = \frac{Total\_Capacity_{18 months}}{Daily\_Gen - Daily\_Util}")
         
         st.markdown("#### 4. Carbon Footprint & Sustainability")
-        st.latex(r"Daily\_CO_2\_Emitted = \frac{Generation \times Heat Rate \times 1000}{GCV} \times 1.7")
+        st.latex(r"Daily\_CO_2\_Emitted = \frac{Generation \times Heat Rate \times 1000}{GCV} \times 1.395")
         st.latex(r"Daily\_Tree\_Offset = \frac{Total\_Matured\_Trees \times 25 \text{ kg}}{365 \times 1000}")
 
 if __name__ == "__main__":
