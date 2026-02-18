@@ -1986,6 +1986,7 @@ def main():
         
         st.markdown("#### 4. Carbon Footprint & Sustainability")
         st.latex(r"Daily\_CO_2\_Emitted = \frac{Generation \times Heat Rate \times 1000}{GCV} \times 1.395")
+        st.write("> **Why 1.395?** Coal Carbon content is assumed to be 38%. Chemical conversion ratio: $0.38 \\times 3.67 = 1.3946$ (Rounded to 1.395 Tons of $CO_2$ per Ton of Coal).")
         st.latex(r"Daily\_Tree\_Offset = \frac{Total\_Matured\_Trees \times 25 \text{ kg}}{365 \times 1000}")
 
 if __name__ == "__main__":
