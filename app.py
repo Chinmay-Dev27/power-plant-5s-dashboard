@@ -1752,23 +1752,25 @@ def main():
                 st.plotly_chart(fig_surv, use_container_width=True)
             
             st.markdown("#### 🌡️ Plantation Heatmap")
-            
+
             hm_view = st.radio("Heatmap View", ["Species vs Year", "Year vs Species"], horizontal=True)
-            
+
             if hm_view == "Species vs Year":
                 fig_heat = px.density_heatmap(
                     df_gb, x='Year', y='Species', z='Planted',
-                    color_continuous_scale='Green'
+                    color_continuous_scale='Greens_r'  # Notice the 's' here
                 )
             else:
                 fig_heat = px.density_heatmap(
                     df_gb, x='Species', y='Year', z='Planted',
-                    color_continuous_scale='Green'
+                    color_continuous_scale='Greens_r'  # Notice the 's' here
                 )
-            
+
+            # Here is where the black background goes!
             fig_heat.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='Black'
+                paper_bgcolor='black',  # Outer background
+                plot_bgcolor='black',   # Inner chart background
+                font_color='white'
             )
             st.plotly_chart(fig_heat, use_container_width=True)
         else:
