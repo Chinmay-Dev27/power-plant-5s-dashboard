@@ -1290,27 +1290,24 @@ def main():
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
                 st.markdown(f"{medal} Unit {u['id']}: {u['hr']:.0f} kcal/kWh")
     
-    # TAB 4: SUSTAINABILITY - INFO ADDED
-    with tabs[3]:
-        display_info(r"""
-        **Sustainability & Carbon Footprint:**
-        * **Daily CO₂ Emissions:** `Coal Consumed (Tons) × 1.395`
-        * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`
-        * **Area Required:** ~1000 trees per acre for new plantations
-        """)
-        
-        st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
-        
-        cols = st.columns(3)
-        total_daily_co2 = 0
-        
-        for i, u in enumerate(units_data):
-            u_co2 = u.get('co2_emitted', 0)
-            total_daily_co2 += u_co2
-            
-            with cols[i]:
-                st.markdown(f"""
-                <div class="glass-card border-bad">
+    # TAB 4: SUSTAINABILITY (TRUE CARBON FOOTPRINT WITH 1.395 LOGIC)
+with tabs[1]:
+    display_info(r"""
+    **Sustainability & Carbon Footprint:**
+    * **Daily CO₂ Emissions:** Calculated as `Coal Consumed (Tons) × 1.395` (Assuming 38% Carbon).
+    * **Daily Tree Offset:** `Total Matured Trees × (25 kg / 365 days) / 1000`.
+    * **Area Required:** Assumes approx 1000 trees per acre for new plantations to offset the deficit.
+    """)
+    
+    st.markdown("#### 🏭 Daily Unit CO₂ Emissions")
+    cols = st.columns(3)
+    total_daily_co2 = 0
+    for i, u in enumerate(units_data):
+        u_co2 = u.get('co2_emitted', 0)
+        total_daily_co2 += u_co2
+        with cols[i]:
+            st.markdown(f"""
+            <div class="glass-card border-bad">
                 <div class="unit-header">UNIT {u['id']}</div>
                 <div class="big-val" style="color:#f87171">{u_co2:,.0f} T</div>
                 <div class="sub-lbl" style="color:#ffffff;">CO₂ Emitted Today</div>
