@@ -1761,14 +1761,14 @@ def main():
             if hm_view == "Species vs Year":
                 fig_heat = px.density_heatmap(
                     df_gb, x='Year', y='Species', z='Planted', 
-                    color_continuous_scale='#10b981', '#ef4444',
+                    color_continuous_scale='#10b981','#ef4444',
                     template='plotly_dark'
                 )
                 fig_heat.update_layout(height=dynamic_height) # Taller chart for Y-axis species
             else:
                 fig_heat = px.density_heatmap(
                     df_gb, x='Species', y='Year', z='Planted', 
-                    color_continuous_scale='#10b981', '#ef4444',
+                    color_continuous_scale='#10b981','#ef4444',
                     template='plotly_dark'
                 )
                 fig_heat.update_layout(height=500)
