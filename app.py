@@ -191,7 +191,7 @@ def load_history(repo):
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         
         df['Date'] = pd.to_datetime(df['Date'])
-        cutoff_date = pd.Timestamp("2026-01-31")
+        cutoff_date = pd.Timestamp.today()
         df = df[df['Date'] <= cutoff_date]
         df = df.sort_values('Date').drop_duplicates(subset=['Date', 'Unit'], keep='last')
         
