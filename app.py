@@ -560,7 +560,7 @@ def create_gauge_chart(value, title, range_min, range_max, target=None, color="#
     
     fig.update_layout(
         height=270,
-        margin=dict(l=20, r=20, t=40, b=10),
+        margin=dict(l=20, r=20, t=70, b=10),
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='white'
     )
