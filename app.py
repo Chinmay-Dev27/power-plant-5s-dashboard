@@ -323,7 +323,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
         
         # --- SMART VACUUM AUTOSCALE ---
         actual_vac = inputs['vac'] / 100 if inputs['vac'] <= -1.0 else inputs['vac']
-        l_vac = max(0, (actual_vac - (-0.92)) / 0.01 * 18) * -1
+        l_vac = max(0, (actual_vac - (-0.90)) / 0.01 * 18) * -1
         
         l_ms = max(0, (540 - inputs['ms']) * 1.2)
         l_fg = max(0, (inputs['fg'] - 130) * 1.5)
@@ -362,7 +362,7 @@ def calculate_unit(u_id, gen, hr, inputs, design_vals, ash_params):
 
     # --- SMART VACUUM AUTOSCALE ---
     actual_vac = inputs['vac'] / 100 if inputs['vac'] <= -1.0 else inputs['vac']
-    l_vac = max(0, (actual_vac - (-0.92)) / 0.01 * 18)
+    l_vac = max(0, (actual_vac - (-0.90)) / 0.01 * 18)
 
     l_ms = max(0, (540 - inputs['ms']) * 1.2)
     l_fg = max(0, (inputs['fg'] - 130) * 1.5)
@@ -762,7 +762,7 @@ def render_unit_detail(u, configs):
     f_style = "background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; font-size: 13px; color: #cbd5e1; text-align: center; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
     
     with lf1: 
-        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">Vacuum Loss</b><br>18 kcal/kWh penalty per 0.01 deviation above -0.92</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">Vacuum Loss</b><br>18 kcal/kWh penalty per 0.01 deviation above -0.90</div>', unsafe_allow_html=True)
     with lf2: 
         st.markdown(f'<div style="{f_style}"><b style="color:#fcd34d;">MS Temp Loss</b><br>1.2 kcal/kWh penalty per 1°C deviation below 540°C</div>', unsafe_allow_html=True)
     with lf3: 
