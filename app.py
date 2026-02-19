@@ -704,6 +704,43 @@ def render_unit_detail(u, configs):
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+# --- NEW: LOGIC EXPLANATION CARDS ---
+    st.markdown("#### 🧠 Calculation Logic")
+    c_logic1, c_logic2 = st.columns(2)
+    
+    with c_logic1:
+        st.markdown("""
+        <div class="glass-card" style="border-left: 4px solid #fcd34d; padding: 15px; text-align: left;">
+            <div class="unit-header" style="color:#fcd34d;">5S SCORE (TECHNICAL HYGIENE)</div>
+            <div style="font-size:13px; color:#cbd5e1; margin-top:10px; line-height: 1.6;">
+                <b>Base Score:</b> 100 points<br>
+                <b>Total Penalty:</b> (Vacuum + MS Temp + FG Temp + Spray + Unaccounted Losses)<br>
+                <b>Penalty Factor:</b> Total Penalty ÷ 3 <i>(Scaling factor to prevent dropping to zero too fast)</i><br>
+                <div style="background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-top:8px; text-align:center;">
+                    <span style="color:#ffffff; font-weight:bold;">Final 5S Score = 100 - Penalty Factor</span>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with c_logic2:
+        st.markdown("""
+        <div class="glass-card" style="border-left: 4px solid #38bdf8; padding: 15px; text-align: left;">
+            <div class="unit-header" style="color:#38bdf8;">CARBON CREDITS & E-CERTS</div>
+            <div style="font-size:13px; color:#cbd5e1; margin-top:10px; line-height: 1.6;">
+                <b>Energy Saved (kcal):</b> (Target HR - Actual HR) × Gen(MU) × 1,000,000<br>
+                <b>Coal Saved (kg):</b> Energy Saved ÷ Coal GCV<br>
+                <b>E-Certs Generated:</b> Energy Saved ÷ 10,000,000<br>
+                <b>Carbon Credits (Tons CO₂):</b> (Coal Saved ÷ 1000) × 1.395<br>
+                <div style="background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-top:8px; text-align:center;">
+                    <span style="color:#ffffff; font-weight:bold;">Profit = E-Certs(₹1k) + Carbon(₹500) + Coal Saved(₹4.5/kg)</span>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    # ------------------------------------
+
 # --- ADD THIS NEW BLOCK HERE ---
     st.markdown("#### 📐 Thermodynamic Loss Formulas")
     lf1, lf2, lf3, lf4, lf5 = st.columns(5)
