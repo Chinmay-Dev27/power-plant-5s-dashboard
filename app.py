@@ -559,7 +559,7 @@ def create_gauge_chart(value, title, range_min, range_max, target=None, color="#
     ))
     
     fig.update_layout(
-        height=250,
+        height=270,
         margin=dict(l=20, r=20, t=40, b=10),
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='white'
@@ -672,11 +672,14 @@ def render_unit_detail(u, configs):
     st.divider()
     
     col3, col4, col5, col6 = st.columns(4)
+    
+    # Added min-height: 135px and flex centering to force perfect alignment across all 4 cards
+    c_style = "min-height: 135px; display: flex; flex-direction: column; justify-content: center;"
 
     with col3:
         st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #fcd34d">
-            <div class="p-title" style="color:#ffffff; font-weight:800;">5S Score</div>
+        <div class="glass-card" style="border-left: 4px solid #fcd34d; {c_style}">
+            <div class="p-title" style="color:#ffffff; font-weight:800; font-size:15px;">5S Score</div>
             <div class="big-val" style="color:#fcd34d">{u['score']:.1f}</div>
             <div class="sub-lbl" style="color:#ffffff;">Technical Hygiene</div>
         </div>
@@ -684,8 +687,8 @@ def render_unit_detail(u, configs):
 
     with col4:
         st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #38bdf8">
-            <div class="p-title" style="color:#ffffff; font-weight:800;">Carbon Credits</div>
+        <div class="glass-card" style="border-left: 4px solid #38bdf8; {c_style}">
+            <div class="p-title" style="color:#ffffff; font-weight:800; font-size:15px;">Carbon Credits</div>
             <div class="big-val" style="color:#38bdf8">{u['carbon']:.1f}</div>
             <div class="sub-lbl" style="color:#ffffff;">Tons CO2 Avoided</div>
         </div>
@@ -693,8 +696,8 @@ def render_unit_detail(u, configs):
 
     with col5:
         st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid #a855f7">
-            <div class="p-title" style="color:#ffffff; font-weight:800;">E-Certs</div>
+        <div class="glass-card" style="border-left: 4px solid #a855f7; {c_style}">
+            <div class="p-title" style="color:#ffffff; font-weight:800; font-size:15px;">E-Certs</div>
             <div class="big-val" style="color:#a855f7">{u['escerts']:.2f}</div>
             <div class="sub-lbl" style="color:#ffffff;">Energy Certificates</div>
         </div>
@@ -705,9 +708,9 @@ def render_unit_detail(u, configs):
         nox_status = "✅" if u['nox'] <= u['limits']['nox'] else "❌"
 
         st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid {'#10b981' if sox_status == '✅' and nox_status == '✅' else '#ef4444'}">
-            <div class="p-title" style="color:#ffffff; font-weight:800;">Compliance</div>
-            <div style="font-size:14px; color:#ffffff; margin-top:10px;">
+        <div class="glass-card" style="border-left: 4px solid {'#10b981' if sox_status == '✅' and nox_status == '✅' else '#ef4444'}; {c_style}">
+            <div class="p-title" style="color:#ffffff; font-weight:800; font-size:15px;">Compliance</div>
+            <div style="font-size:13px; color:#ffffff; margin-top:8px;">
                 SOx {sox_status} {u['sox']:.0f}/{u['limits']['sox']}<br>
                 NOx {nox_status} {u['nox']:.0f}/{u['limits']['nox']}
             </div>
