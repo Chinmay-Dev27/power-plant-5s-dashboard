@@ -672,7 +672,7 @@ def render_unit_detail(u, configs):
     st.divider()
     
     col3, col4, col5 = st.columns(3)
-    
+
     with col3:
         st.markdown(f"""
         <div class="glass-card" style="border-left: 4px solid #fcd34d">
@@ -681,7 +681,7 @@ def render_unit_detail(u, configs):
             <div class="sub-lbl" style="color:#ffffff;">Technical Hygiene</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     with col4:
         st.markdown(f"""
         <div class="glass-card" style="border-left: 4px solid #38bdf8">
@@ -690,11 +690,11 @@ def render_unit_detail(u, configs):
             <div class="sub-lbl" style="color:#ffffff;">Tons CO2 Avoided</div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     with col5:
         sox_status = "✅" if u['sox'] <= u['limits']['sox'] else "❌"
         nox_status = "✅" if u['nox'] <= u['limits']['nox'] else "❌"
-        
+
         st.markdown(f"""
         <div class="glass-card" style="border-left: 4px solid {'#10b981' if sox_status == '✅' and nox_status == '✅' else '#ef4444'}">
             <div class="p-title" style="color:#ffffff; font-weight:800;">Compliance</div>
@@ -716,7 +716,7 @@ def render_unit_detail(u, configs):
             <div style="font-size:13px; color:#cbd5e1; margin-top:10px; line-height: 1.6;">
                 <b>Base Score:</b> 100 points<br>
                 <b>Total Penalty:</b> (Vacuum + MS Temp + FG Temp + Spray + Unaccounted Losses)<br>
-                <b>Penalty Factor:</b> Total Penalty ÷ 3 <i>(Scaling factor to prevent dropping to zero too fast)</i><br>
+                <b>Penalty Factor:</b> Total Penalty ÷ 3 <i>(Scaling factor to prevent dropping to zero too fast,This means for every 3 kcal/kWh of thermodynamic penalty your unit incurs, it loses exactly 1 point on the 5S Score.)</i><br>
                 <div style="background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-top:8px; text-align:center;">
                     <span style="color:#ffffff; font-weight:bold;">Final 5S Score = 100 - Penalty Factor</span>
                 </div>
