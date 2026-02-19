@@ -717,19 +717,7 @@ def render_unit_detail(u, configs):
         </div>
         """, unsafe_allow_html=True)
 
-    with col5:
-        sox_status = "✅" if u['sox'] <= u['limits']['sox'] else "❌"
-        nox_status = "✅" if u['nox'] <= u['limits']['nox'] else "❌"
-
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 4px solid {'#10b981' if sox_status == '✅' and nox_status == '✅' else '#ef4444'}">
-            <div class="p-title" style="color:#ffffff; font-weight:800;">Compliance</div>
-            <div style="font-size:16px; color:#ffffff; margin-top:10px;">
-                SOx {sox_status} {u['sox']:.0f}/{u['limits']['sox']}<br>
-                NOx {nox_status} {u['nox']:.0f}/{u['limits']['nox']}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    
         
 # --- NEW: LOGIC EXPLANATION CARDS ---
     st.markdown("#### 🧠 Calculation Logic")
