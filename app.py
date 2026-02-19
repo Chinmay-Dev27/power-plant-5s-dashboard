@@ -1757,7 +1757,7 @@ def main():
         s_col1, s_col2, s_col3 = st.columns(3)
         
         with s_col1:
-            s_vac = st.slider("Vacuum (kg/cm²)", -0.60, -0.99, -0.92, step=0.001)
+            s_vac = st.slider("Vacuum (kg/cm²)", -0.60, -0.92, step=0.01)
             s_ms = st.slider("MS Temp (°C)", 510, 545, 540)
         
         with s_col2:
