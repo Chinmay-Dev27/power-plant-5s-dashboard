@@ -671,7 +671,7 @@ def render_unit_detail(u, configs):
     
     st.divider()
     
-    col3, col4, col5 = st.columns(3)
+    col3, col4, col5, col6 = st.columns(4)
 
     with col3:
         st.markdown(f"""
@@ -688,6 +688,29 @@ def render_unit_detail(u, configs):
             <div class="p-title" style="color:#ffffff; font-weight:800;">Carbon Credits</div>
             <div class="big-val" style="color:#38bdf8">{u['carbon']:.1f}</div>
             <div class="sub-lbl" style="color:#ffffff;">Tons CO2 Avoided</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid #a855f7">
+            <div class="p-title" style="color:#ffffff; font-weight:800;">E-Certs</div>
+            <div class="big-val" style="color:#a855f7">{u['escerts']:.2f}</div>
+            <div class="sub-lbl" style="color:#ffffff;">Energy Certificates</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col6:
+        sox_status = "✅" if u['sox'] <= u['limits']['sox'] else "❌"
+        nox_status = "✅" if u['nox'] <= u['limits']['nox'] else "❌"
+
+        st.markdown(f"""
+        <div class="glass-card" style="border-left: 4px solid {'#10b981' if sox_status == '✅' and nox_status == '✅' else '#ef4444'}">
+            <div class="p-title" style="color:#ffffff; font-weight:800;">Compliance</div>
+            <div style="font-size:14px; color:#ffffff; margin-top:10px;">
+                SOx {sox_status} {u['sox']:.0f}/{u['limits']['sox']}<br>
+                NOx {nox_status} {u['nox']:.0f}/{u['limits']['nox']}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
