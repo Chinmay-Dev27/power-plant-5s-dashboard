@@ -1768,7 +1768,7 @@ def main():
             s_gcv = st.slider("Coal GCV (kcal/kg)", 2800, 4500, 3600)
             s_bio = st.slider("Biomass (%)", 0, 20, 0)
         
-        sim_vac_loss = (abs(s_vac) - 0.92) * 100 * -15
+        sim_vac_loss = (abs(s_vac) - 0.90) * 100 * -15
         sim_ms_loss = (540 - s_ms) * 0.7
         sim_fg_loss = (s_fg - 130) / 2
         sim_hr_impact = sim_vac_loss + sim_ms_loss + sim_fg_loss
