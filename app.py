@@ -1129,7 +1129,7 @@ def main():
     bio_homes = sum(u['homes_bio'] for u in units_data) if units_data else 0
     
     # Main Dashboard
-    st.title("🏭 GMR Kamalanga 5S Dashboard - Complete & Fixed")
+    st.title("🏭 GMR Kamalanga 5S Dashboard - Dashboard - ESG")
     
     col_top1, col_top2 = st.columns([5, 1])
     
